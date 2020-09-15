@@ -1,5 +1,5 @@
 # echarts-taro3-react
-基于taro3.x版本构建的多端小程序+H5 echarts组件
+基于taro3.x版本构建的微信小程序echarts组件，及使用示例
 
 ## 特性
 + taro3.0
