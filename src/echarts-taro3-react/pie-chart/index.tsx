@@ -62,7 +62,7 @@ export default class PieChart extends Component<{}, PieChartState> {
       <EcCanvasTaro
         ref={this.refChartTaro}
         ec={this.state.ec}
-        canvasId="pie-chart2"
+        canvasId='pie-chart2'
       />
     );
   }

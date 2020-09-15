@@ -70,7 +70,7 @@ export default class BarChart extends Component<{}, BarChartState> {
     return (
       <EcCanvasTaro
         ref={this.refChart}
-        canvasId="mychart-area"
+        canvasId='mychart-area'
         ec={this.state.ec}
       />
     );

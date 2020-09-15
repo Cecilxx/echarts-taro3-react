@@ -69,7 +69,7 @@ export default class LineChart extends Component<{}, LineCharttate> {
     return (
       <EcCanvasTaro
         ref={this.refChart}
-        canvasId="line-chart"
+        canvasId='line-chart'
         ec={this.state.ec}
       />
     );

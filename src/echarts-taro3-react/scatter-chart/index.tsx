@@ -51,7 +51,7 @@ export default class ScatterChart extends Component<{}, ScatterChartState> {
     return (
       <EcCanvasTaro
         ref={this.refChart}
-        canvasId="mychart-area"
+        canvasId='mychart-area'
         ec={this.state.ec}
       />
     );
