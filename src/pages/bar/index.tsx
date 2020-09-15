@@ -1,7 +1,7 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
-import { BarChart } from "../../echarts-taro3-react";
+import { BarChart } from "../../../lib";
 import "./index.less";
 
 export default class Bar extends Component {
@@ -24,7 +24,7 @@ export default class Bar extends Component {
 
   render() {
     return (
-      <View className="bar-chart">
+      <View className='bar-chart'>
         <BarChart ref={this.refBarChart} />
       </View>
     );

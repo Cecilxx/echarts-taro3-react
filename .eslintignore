@@ -7,5 +7,4 @@ node_modules/
 resource/
 lib/
 
-src/echarts-taro3-react/ec-canvas/
 src/echarts-taro3-react/ec-canvas-taro/
