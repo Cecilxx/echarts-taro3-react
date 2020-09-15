@@ -1,4 +1,4 @@
-# multi-mini-echarts
+# echarts-taro3-react
 基于taro3.x版本构建的多端小程序+H5 echarts组件
 
 ## 特性
