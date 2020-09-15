@@ -12,13 +12,15 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "strictNullChecks": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "baseUrl": ".",
     "rootDir": ".",
     "jsx": "react",
     "jsxFactory": "React.createElement",
     "allowJs": true,
     "resolveJsonModule": true,
+    "declaration": true,
+    "esModuleInterop": true,
     "typeRoots": [
       "node_modules/@types",
       "global.d.ts"
@@ -28,5 +30,6 @@
     "node_modules",
     "dist"
   ],
+  "include": ["src/echarts-taro3-react"],
   "compileOnSave": false
 }
