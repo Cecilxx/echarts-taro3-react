@@ -2027,7 +2027,9 @@ var stop = isDomLevel2 ? function (e) {
  * @return {boolean}
  */
 
-
+function isMiddleOrRightButtonOnMouseUpDown(e) {
+  return e.which === 2 || e.which === 3;
+}
 /**
  * To be removed.
  * @deprecated
@@ -19159,7 +19161,23 @@ var hbox = curry(boxLayout, 'horizontal');
  * @return {Object} {width, height}
  */
 
-
+function getAvailableSize(positionInfo, containerRect, margin) {
+  var containerWidth = containerRect.width;
+  var containerHeight = containerRect.height;
+  var x = parsePercent$1(positionInfo.x, containerWidth);
+  var y = parsePercent$1(positionInfo.y, containerHeight);
+  var x2 = parsePercent$1(positionInfo.x2, containerWidth);
+  var y2 = parsePercent$1(positionInfo.y2, containerHeight);
+  (isNaN(x) || isNaN(parseFloat(positionInfo.x))) && (x = 0);
+  (isNaN(x2) || isNaN(parseFloat(positionInfo.x2))) && (x2 = containerWidth);
+  (isNaN(y) || isNaN(parseFloat(positionInfo.y))) && (y = 0);
+  (isNaN(y2) || isNaN(parseFloat(positionInfo.y2))) && (y2 = containerHeight);
+  margin = normalizeCssArray$1(margin || 0);
+  return {
+    width: Math.max(x2 - x - margin[1] - margin[3], 0),
+    height: Math.max(y2 - y - margin[0] - margin[2], 0)
+  };
+}
 /**
  * Parse position info.
  *
@@ -19313,7 +19331,44 @@ function getLayoutRect(positionInfo, containerRect, margin) {
  *               In this mode positionInfo.width/height can only be number.
  */
 
+function positionElement(el, positionInfo, containerRect, margin, opt) {
+  var h = !opt || !opt.hv || opt.hv[0];
+  var v = !opt || !opt.hv || opt.hv[1];
+  var boundingMode = opt && opt.boundingMode || 'all';
 
+  if (!h && !v) {
+    return;
+  }
+
+  var rect;
+
+  if (boundingMode === 'raw') {
+    rect = el.type === 'group' ? new BoundingRect(0, 0, +positionInfo.width || 0, +positionInfo.height || 0) : el.getBoundingRect();
+  } else {
+    rect = el.getBoundingRect();
+
+    if (el.needLocalTransform()) {
+      var transform = el.getLocalTransform(); // Notice: raw rect may be inner object of el,
+      // which should not be modified.
+
+      rect = rect.clone();
+      rect.applyTransform(transform);
+    }
+  } // The real width and height can not be specified but calculated by the given el.
+
+
+  positionInfo = getLayoutRect(defaults({
+    width: rect.width,
+    height: rect.height
+  }, positionInfo), containerRect, margin); // Because 'tranlate' is the last step in transform
+  // (see zrender/core/Transformable#getLocalTransform),
+  // we can just only modify el.position to get final result.
+
+  var elPos = el.position;
+  var dx = h ? positionInfo.x - rect.x : 0;
+  var dy = v ? positionInfo.y - rect.y : 0;
+  el.attr('position', boundingMode === 'raw' ? [dx, dy] : [elPos[0] + dx, elPos[1] + dy]);
+}
 /**
  * @param {Object} option Contains some of the properties in HV_NAMES.
  * @param {number} hvIdx 0: horizontal; 1: vertical.
@@ -25991,6 +26046,11 @@ function makeViewBoxTransform(viewBoxRect, width, height) {
  *     viewBoxTransform: the {scale, position} calculated by viewBox and viewport, is exists.
  * }
  */
+
+function parseSVG(xml, opt) {
+  var parser = new SVGParser();
+  return parser.parse(xml, opt);
+}
 
 /*
 * Licensed to the Apache Software Foundation (ASF) under one
@@ -34280,7 +34340,7 @@ function decodePolygon(coordinate, encodeOffsets, encodeScale) {
  */
 
 
-var parseGeoJSON = function (geoJson, nameProperty) {
+var parseGeoJson$1 = function (geoJson, nameProperty) {
   decode(geoJson);
   return map(filter(geoJson.features, function (featureObj) {
     // Output of mapshaper may have geometry null
@@ -35031,7 +35091,7 @@ function fixOnBandTicksCoords(axis, ticksCoords, alignWithLabel, clamp) {
 /**
  * Do not mount those modules on 'src/echarts' for better tree shaking.
  */
-var parseGeoJson = parseGeoJSON;
+var parseGeoJson = parseGeoJson$1;
 var ecUtil = {};
 each$1(['map', 'each', 'filter', 'indexOf', 'inherits', 'reduce', 'filter', 'bind', 'curry', 'isArray', 'isString', 'isObject', 'isFunction', 'extend', 'defaults', 'clone', 'merge'], function (name) {
   ecUtil[name] = zrUtil[name];
@@ -40973,7 +41033,7 @@ var visualSymbol = function (seriesType, defaultSymbolType, legendSymbol) {
 */
 
 /* global Float32Array */
-var layoutPoints = function (seriesType) {
+var pointsLayout = function (seriesType) {
   return {
     seriesType: seriesType,
     plan: createRenderPlanner(),
@@ -41169,7 +41229,7 @@ var dataSample = function (seriesType) {
 * under the License.
 */
 registerVisual(visualSymbol('line', 'circle', 'line'));
-registerLayout(layoutPoints('line')); // Down sample after filter
+registerLayout(pointsLayout('line')); // Down sample after filter
 
 registerProcessor(PRIORITY.PROCESSOR.STATISTIC, dataSample('line'));
 
@@ -41243,7 +41303,7 @@ var createListSimply = function (seriesModel, opt, nameList) {
  * To eanble data select, option of series must have `selectedMode`.
  * And each data item will use `selected` to toggle itself selected status
  */
-var dataSelectableMixin = {
+var selectableMixin = {
   /**
    * @param {Array.<Object>} targetList [{name, value, selected}, ...]
    *        If targetList is an array, it should like [{name: ..., value: ...}, ...].
@@ -41531,7 +41591,7 @@ var PieSeries = extendSeriesModel({
     animationEasing: 'cubicOut'
   }
 });
-mixin(PieSeries, dataSelectableMixin);
+mixin(PieSeries, selectableMixin);
 
 /*
 * Licensed to the Apache Software Foundation (ASF) under one
@@ -42601,6 +42661,17395 @@ registerProcessor(dataFilter('pie'));
 * specific language governing permissions and limitations
 * under the License.
 */
+SeriesModel.extend({
+  type: 'series.scatter',
+  dependencies: ['grid', 'polar', 'geo', 'singleAxis', 'calendar'],
+  getInitialData: function (option, ecModel) {
+    return createListFromArray(this.getSource(), this, {
+      useEncodeDefaulter: true
+    });
+  },
+  brushSelector: 'point',
+  getProgressive: function () {
+    var progressive = this.option.progressive;
+
+    if (progressive == null) {
+      // PENDING
+      return this.option.large ? 5e3 : this.get('progressive');
+    }
+
+    return progressive;
+  },
+  getProgressiveThreshold: function () {
+    var progressiveThreshold = this.option.progressiveThreshold;
+
+    if (progressiveThreshold == null) {
+      // PENDING
+      return this.option.large ? 1e4 : this.get('progressiveThreshold');
+    }
+
+    return progressiveThreshold;
+  },
+  defaultOption: {
+    coordinateSystem: 'cartesian2d',
+    zlevel: 0,
+    z: 2,
+    legendHoverLink: true,
+    hoverAnimation: true,
+    // Cartesian coordinate system
+    // xAxisIndex: 0,
+    // yAxisIndex: 0,
+    // Polar coordinate system
+    // polarIndex: 0,
+    // Geo coordinate system
+    // geoIndex: 0,
+    // symbol: null,        // 图形类型
+    symbolSize: 10,
+    // 图形大小，半宽（半径）参数，当图形为方向或菱形则总宽度为symbolSize * 2
+    // symbolRotate: null,  // 图形旋转控制
+    large: false,
+    // Available when large is true
+    largeThreshold: 2000,
+    // cursor: null,
+    // label: {
+    // show: false
+    // distance: 5,
+    // formatter: 标签文本格式器，同Tooltip.formatter，不支持异步回调
+    // position: 默认自适应，水平布局为'top'，垂直布局为'right'，可选为
+    //           'inside'|'left'|'right'|'top'|'bottom'
+    // 默认使用全局文本样式，详见TEXTSTYLE
+    // },
+    itemStyle: {
+      opacity: 0.8 // color: 各异
+
+    },
+    // If clip the overflow graphics
+    // Works on cartesian / polar series
+    clip: true // progressive: null
+
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/* global Float32Array */
+// TODO Batch by color
+var BOOST_SIZE_THRESHOLD = 4;
+var LargeSymbolPath = extendShape({
+  shape: {
+    points: null
+  },
+  symbolProxy: null,
+  softClipShape: null,
+  buildPath: function (path, shape) {
+    var points = shape.points;
+    var size = shape.size;
+    var symbolProxy = this.symbolProxy;
+    var symbolProxyShape = symbolProxy.shape;
+    var ctx = path.getContext ? path.getContext() : path;
+    var canBoost = ctx && size[0] < BOOST_SIZE_THRESHOLD; // Do draw in afterBrush.
+
+    if (canBoost) {
+      return;
+    }
+
+    for (var i = 0; i < points.length;) {
+      var x = points[i++];
+      var y = points[i++];
+
+      if (isNaN(x) || isNaN(y)) {
+        continue;
+      }
+
+      if (this.softClipShape && !this.softClipShape.contain(x, y)) {
+        continue;
+      }
+
+      symbolProxyShape.x = x - size[0] / 2;
+      symbolProxyShape.y = y - size[1] / 2;
+      symbolProxyShape.width = size[0];
+      symbolProxyShape.height = size[1];
+      symbolProxy.buildPath(path, symbolProxyShape, true);
+    }
+  },
+  afterBrush: function (ctx) {
+    var shape = this.shape;
+    var points = shape.points;
+    var size = shape.size;
+    var canBoost = size[0] < BOOST_SIZE_THRESHOLD;
+
+    if (!canBoost) {
+      return;
+    }
+
+    this.setTransform(ctx); // PENDING If style or other canvas status changed?
+
+    for (var i = 0; i < points.length;) {
+      var x = points[i++];
+      var y = points[i++];
+
+      if (isNaN(x) || isNaN(y)) {
+        continue;
+      }
+
+      if (this.softClipShape && !this.softClipShape.contain(x, y)) {
+        continue;
+      } // fillRect is faster than building a rect path and draw.
+      // And it support light globalCompositeOperation.
+
+
+      ctx.fillRect(x - size[0] / 2, y - size[1] / 2, size[0], size[1]);
+    }
+
+    this.restoreTransform(ctx);
+  },
+  findDataIndex: function (x, y) {
+    // TODO ???
+    // Consider transform
+    var shape = this.shape;
+    var points = shape.points;
+    var size = shape.size;
+    var w = Math.max(size[0], 4);
+    var h = Math.max(size[1], 4); // Not consider transform
+    // Treat each element as a rect
+    // top down traverse
+
+    for (var idx = points.length / 2 - 1; idx >= 0; idx--) {
+      var i = idx * 2;
+      var x0 = points[i] - w / 2;
+      var y0 = points[i + 1] - h / 2;
+
+      if (x >= x0 && y >= y0 && x <= x0 + w && y <= y0 + h) {
+        return idx;
+      }
+    }
+
+    return -1;
+  }
+});
+
+function LargeSymbolDraw() {
+  this.group = new Group();
+}
+
+var largeSymbolProto = LargeSymbolDraw.prototype;
+
+largeSymbolProto.isPersistent = function () {
+  return !this._incremental;
+};
+/**
+ * Update symbols draw by new data
+ * @param {module:echarts/data/List} data
+ * @param {Object} opt
+ * @param {Object} [opt.clipShape]
+ */
+
+
+largeSymbolProto.updateData = function (data, opt) {
+  this.group.removeAll();
+  var symbolEl = new LargeSymbolPath({
+    rectHover: true,
+    cursor: 'default'
+  });
+  symbolEl.setShape({
+    points: data.getLayout('symbolPoints')
+  });
+
+  this._setCommon(symbolEl, data, false, opt);
+
+  this.group.add(symbolEl);
+  this._incremental = null;
+};
+
+largeSymbolProto.updateLayout = function (data) {
+  if (this._incremental) {
+    return;
+  }
+
+  var points = data.getLayout('symbolPoints');
+  this.group.eachChild(function (child) {
+    if (child.startIndex != null) {
+      var len = (child.endIndex - child.startIndex) * 2;
+      var byteOffset = child.startIndex * 4 * 2;
+      points = new Float32Array(points.buffer, byteOffset, len);
+    }
+
+    child.setShape('points', points);
+  });
+};
+
+largeSymbolProto.incrementalPrepareUpdate = function (data) {
+  this.group.removeAll();
+
+  this._clearIncremental(); // Only use incremental displayables when data amount is larger than 2 million.
+  // PENDING Incremental data?
+
+
+  if (data.count() > 2e6) {
+    if (!this._incremental) {
+      this._incremental = new IncrementalDisplayble({
+        silent: true
+      });
+    }
+
+    this.group.add(this._incremental);
+  } else {
+    this._incremental = null;
+  }
+};
+
+largeSymbolProto.incrementalUpdate = function (taskParams, data, opt) {
+  var symbolEl;
+
+  if (this._incremental) {
+    symbolEl = new LargeSymbolPath();
+
+    this._incremental.addDisplayable(symbolEl, true);
+  } else {
+    symbolEl = new LargeSymbolPath({
+      rectHover: true,
+      cursor: 'default',
+      startIndex: taskParams.start,
+      endIndex: taskParams.end
+    });
+    symbolEl.incremental = true;
+    this.group.add(symbolEl);
+  }
+
+  symbolEl.setShape({
+    points: data.getLayout('symbolPoints')
+  });
+
+  this._setCommon(symbolEl, data, !!this._incremental, opt);
+};
+
+largeSymbolProto._setCommon = function (symbolEl, data, isIncremental, opt) {
+  var hostModel = data.hostModel;
+  opt = opt || {}; // TODO
+  // if (data.hasItemVisual.symbolSize) {
+  //     // TODO typed array?
+  //     symbolEl.setShape('sizes', data.mapArray(
+  //         function (idx) {
+  //             var size = data.getItemVisual(idx, 'symbolSize');
+  //             return (size instanceof Array) ? size : [size, size];
+  //         }
+  //     ));
+  // }
+  // else {
+
+  var size = data.getVisual('symbolSize');
+  symbolEl.setShape('size', size instanceof Array ? size : [size, size]); // }
+
+  symbolEl.softClipShape = opt.clipShape || null; // Create symbolProxy to build path for each data
+
+  symbolEl.symbolProxy = createSymbol(data.getVisual('symbol'), 0, 0, 0, 0); // Use symbolProxy setColor method
+
+  symbolEl.setColor = symbolEl.symbolProxy.setColor;
+  var extrudeShadow = symbolEl.shape.size[0] < BOOST_SIZE_THRESHOLD;
+  symbolEl.useStyle( // Draw shadow when doing fillRect is extremely slow.
+  hostModel.getModel('itemStyle').getItemStyle(extrudeShadow ? ['color', 'shadowBlur', 'shadowColor'] : ['color']));
+  var visualColor = data.getVisual('color');
+
+  if (visualColor) {
+    symbolEl.setColor(visualColor);
+  }
+
+  if (!isIncremental) {
+    // Enable tooltip
+    // PENDING May have performance issue when path is extremely large
+    symbolEl.seriesIndex = hostModel.seriesIndex;
+    symbolEl.on('mousemove', function (e) {
+      symbolEl.dataIndex = null;
+      var dataIndex = symbolEl.findDataIndex(e.offsetX, e.offsetY);
+
+      if (dataIndex >= 0) {
+        // Provide dataIndex for tooltip
+        symbolEl.dataIndex = dataIndex + (symbolEl.startIndex || 0);
+      }
+    });
+  }
+};
+
+largeSymbolProto.remove = function () {
+  this._clearIncremental();
+
+  this._incremental = null;
+  this.group.removeAll();
+};
+
+largeSymbolProto._clearIncremental = function () {
+  var incremental = this._incremental;
+
+  if (incremental) {
+    incremental.clearDisplaybles();
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+extendChartView({
+  type: 'scatter',
+  render: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+
+    var symbolDraw = this._updateSymbolDraw(data, seriesModel);
+
+    symbolDraw.updateData(data, {
+      // TODO
+      // If this parameter should be a shape or a bounding volume
+      // shape will be more general.
+      // But bounding volume like bounding rect will be much faster in the contain calculation
+      clipShape: this._getClipShape(seriesModel)
+    });
+    this._finished = true;
+  },
+  incrementalPrepareRender: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+
+    var symbolDraw = this._updateSymbolDraw(data, seriesModel);
+
+    symbolDraw.incrementalPrepareUpdate(data);
+    this._finished = false;
+  },
+  incrementalRender: function (taskParams, seriesModel, ecModel) {
+    this._symbolDraw.incrementalUpdate(taskParams, seriesModel.getData(), {
+      clipShape: this._getClipShape(seriesModel)
+    });
+
+    this._finished = taskParams.end === seriesModel.getData().count();
+  },
+  updateTransform: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData(); // Must mark group dirty and make sure the incremental layer will be cleared
+    // PENDING
+
+    this.group.dirty();
+
+    if (!this._finished || data.count() > 1e4 || !this._symbolDraw.isPersistent()) {
+      return {
+        update: true
+      };
+    } else {
+      var res = pointsLayout().reset(seriesModel);
+
+      if (res.progress) {
+        res.progress({
+          start: 0,
+          end: data.count()
+        }, data);
+      }
+
+      this._symbolDraw.updateLayout(data);
+    }
+  },
+  _getClipShape: function (seriesModel) {
+    var coordSys = seriesModel.coordinateSystem;
+    var clipArea = coordSys && coordSys.getArea && coordSys.getArea();
+    return seriesModel.get('clip', true) ? clipArea : null;
+  },
+  _updateSymbolDraw: function (data, seriesModel) {
+    var symbolDraw = this._symbolDraw;
+    var pipelineContext = seriesModel.pipelineContext;
+    var isLargeDraw = pipelineContext.large;
+
+    if (!symbolDraw || isLargeDraw !== this._isLargeDraw) {
+      symbolDraw && symbolDraw.remove();
+      symbolDraw = this._symbolDraw = isLargeDraw ? new LargeSymbolDraw() : new SymbolDraw();
+      this._isLargeDraw = isLargeDraw;
+      this.group.removeAll();
+    }
+
+    this.group.add(symbolDraw.group);
+    return symbolDraw;
+  },
+  remove: function (ecModel, api) {
+    this._symbolDraw && this._symbolDraw.remove(true);
+    this._symbolDraw = null;
+  },
+  dispose: function () {}
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(visualSymbol('scatter', 'circle'));
+registerLayout(pointsLayout('scatter')); // echarts.registerProcessor(function (ecModel, api) {
+//     ecModel.eachSeriesByType('scatter', function (seriesModel) {
+//         var data = seriesModel.getData();
+//         var coordSys = seriesModel.coordinateSystem;
+//         if (coordSys.type !== 'geo') {
+//             return;
+//         }
+//         var startPt = coordSys.pointToData([0, 0]);
+//         var endPt = coordSys.pointToData([api.getWidth(), api.getHeight()]);
+//         var dims = zrUtil.map(coordSys.dimensions, function (dim) {
+//             return data.mapDimension(dim);
+//         });
+//         var range = {};
+//         range[dims[0]] = [Math.min(startPt[0], endPt[0]), Math.max(startPt[0], endPt[0])];
+//         range[dims[1]] = [Math.min(startPt[1], endPt[1]), Math.max(startPt[1], endPt[1])];
+//         data.selectRange(range);
+//     });
+// });
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function IndicatorAxis(dim, scale, radiusExtent) {
+  Axis.call(this, dim, scale, radiusExtent);
+  /**
+   * Axis type
+   *  - 'category'
+   *  - 'value'
+   *  - 'time'
+   *  - 'log'
+   * @type {string}
+   */
+
+  this.type = 'value';
+  this.angle = 0;
+  /**
+   * Indicator name
+   * @type {string}
+   */
+
+  this.name = '';
+  /**
+   * @type {module:echarts/model/Model}
+   */
+
+  this.model;
+}
+
+inherits(IndicatorAxis, Axis);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// TODO clockwise
+function Radar(radarModel, ecModel, api) {
+  this._model = radarModel;
+  /**
+   * Radar dimensions
+   * @type {Array.<string>}
+   */
+
+  this.dimensions = [];
+  this._indicatorAxes = map(radarModel.getIndicatorModels(), function (indicatorModel, idx) {
+    var dim = 'indicator_' + idx;
+    var indicatorAxis = new IndicatorAxis(dim, indicatorModel.get('axisType') === 'log' ? new LogScale() : new IntervalScale());
+    indicatorAxis.name = indicatorModel.get('name'); // Inject model and axis
+
+    indicatorAxis.model = indicatorModel;
+    indicatorModel.axis = indicatorAxis;
+    this.dimensions.push(dim);
+    return indicatorAxis;
+  }, this);
+  this.resize(radarModel, api);
+  /**
+   * @type {number}
+   * @readOnly
+   */
+
+  this.cx;
+  /**
+   * @type {number}
+   * @readOnly
+   */
+
+  this.cy;
+  /**
+   * @type {number}
+   * @readOnly
+   */
+
+  this.r;
+  /**
+   * @type {number}
+   * @readOnly
+   */
+
+  this.r0;
+  /**
+   * @type {number}
+   * @readOnly
+   */
+
+  this.startAngle;
+}
+
+Radar.prototype.getIndicatorAxes = function () {
+  return this._indicatorAxes;
+};
+
+Radar.prototype.dataToPoint = function (value, indicatorIndex) {
+  var indicatorAxis = this._indicatorAxes[indicatorIndex];
+  return this.coordToPoint(indicatorAxis.dataToCoord(value), indicatorIndex);
+};
+
+Radar.prototype.coordToPoint = function (coord, indicatorIndex) {
+  var indicatorAxis = this._indicatorAxes[indicatorIndex];
+  var angle = indicatorAxis.angle;
+  var x = this.cx + coord * Math.cos(angle);
+  var y = this.cy - coord * Math.sin(angle);
+  return [x, y];
+};
+
+Radar.prototype.pointToData = function (pt) {
+  var dx = pt[0] - this.cx;
+  var dy = pt[1] - this.cy;
+  var radius = Math.sqrt(dx * dx + dy * dy);
+  dx /= radius;
+  dy /= radius;
+  var radian = Math.atan2(-dy, dx); // Find the closest angle
+  // FIXME index can calculated directly
+
+  var minRadianDiff = Infinity;
+  var closestAxis;
+  var closestAxisIdx = -1;
+
+  for (var i = 0; i < this._indicatorAxes.length; i++) {
+    var indicatorAxis = this._indicatorAxes[i];
+    var diff = Math.abs(radian - indicatorAxis.angle);
+
+    if (diff < minRadianDiff) {
+      closestAxis = indicatorAxis;
+      closestAxisIdx = i;
+      minRadianDiff = diff;
+    }
+  }
+
+  return [closestAxisIdx, +(closestAxis && closestAxis.coordToData(radius))];
+};
+
+Radar.prototype.resize = function (radarModel, api) {
+  var center = radarModel.get('center');
+  var viewWidth = api.getWidth();
+  var viewHeight = api.getHeight();
+  var viewSize = Math.min(viewWidth, viewHeight) / 2;
+  this.cx = parsePercent$1(center[0], viewWidth);
+  this.cy = parsePercent$1(center[1], viewHeight);
+  this.startAngle = radarModel.get('startAngle') * Math.PI / 180; // radius may be single value like `20`, `'80%'`, or array like `[10, '80%']`
+
+  var radius = radarModel.get('radius');
+
+  if (typeof radius === 'string' || typeof radius === 'number') {
+    radius = [0, radius];
+  }
+
+  this.r0 = parsePercent$1(radius[0], viewSize);
+  this.r = parsePercent$1(radius[1], viewSize);
+  each$1(this._indicatorAxes, function (indicatorAxis, idx) {
+    indicatorAxis.setExtent(this.r0, this.r);
+    var angle = this.startAngle + idx * Math.PI * 2 / this._indicatorAxes.length; // Normalize to [-PI, PI]
+
+    angle = Math.atan2(Math.sin(angle), Math.cos(angle));
+    indicatorAxis.angle = angle;
+  }, this);
+};
+
+Radar.prototype.update = function (ecModel, api) {
+  var indicatorAxes = this._indicatorAxes;
+  var radarModel = this._model;
+  each$1(indicatorAxes, function (indicatorAxis) {
+    indicatorAxis.scale.setExtent(Infinity, -Infinity);
+  });
+  ecModel.eachSeriesByType('radar', function (radarSeries, idx) {
+    if (radarSeries.get('coordinateSystem') !== 'radar' || ecModel.getComponent('radar', radarSeries.get('radarIndex')) !== radarModel) {
+      return;
+    }
+
+    var data = radarSeries.getData();
+    each$1(indicatorAxes, function (indicatorAxis) {
+      indicatorAxis.scale.unionExtentFromData(data, data.mapDimension(indicatorAxis.dim));
+    });
+  }, this);
+  var splitNumber = radarModel.get('splitNumber');
+
+  function increaseInterval(interval) {
+    var exp10 = Math.pow(10, Math.floor(Math.log(interval) / Math.LN10)); // Increase interval
+
+    var f = interval / exp10;
+
+    if (f === 2) {
+      f = 5;
+    } else {
+      // f is 2 or 5
+      f *= 2;
+    }
+
+    return f * exp10;
+  } // Force all the axis fixing the maxSplitNumber.
+
+
+  each$1(indicatorAxes, function (indicatorAxis, idx) {
+    var rawExtent = getScaleExtent(indicatorAxis.scale, indicatorAxis.model).extent;
+    niceScaleExtent(indicatorAxis.scale, indicatorAxis.model);
+    var axisModel = indicatorAxis.model;
+    var scale = indicatorAxis.scale;
+    var fixedMin = axisModel.getMin();
+    var fixedMax = axisModel.getMax();
+    var interval = scale.getInterval();
+
+    if (fixedMin != null && fixedMax != null) {
+      // User set min, max, divide to get new interval
+      scale.setExtent(+fixedMin, +fixedMax);
+      scale.setInterval((fixedMax - fixedMin) / splitNumber);
+    } else if (fixedMin != null) {
+      var max; // User set min, expand extent on the other side
+
+      do {
+        max = fixedMin + interval * splitNumber;
+        scale.setExtent(+fixedMin, max); // Interval must been set after extent
+        // FIXME
+
+        scale.setInterval(interval);
+        interval = increaseInterval(interval);
+      } while (max < rawExtent[1] && isFinite(max) && isFinite(rawExtent[1]));
+    } else if (fixedMax != null) {
+      var min; // User set min, expand extent on the other side
+
+      do {
+        min = fixedMax - interval * splitNumber;
+        scale.setExtent(min, +fixedMax);
+        scale.setInterval(interval);
+        interval = increaseInterval(interval);
+      } while (min > rawExtent[0] && isFinite(min) && isFinite(rawExtent[0]));
+    } else {
+      var nicedSplitNumber = scale.getTicks().length - 1;
+
+      if (nicedSplitNumber > splitNumber) {
+        interval = increaseInterval(interval);
+      } // TODO
+
+
+      var max = Math.ceil(rawExtent[1] / interval) * interval;
+      var min = round$1(max - interval * splitNumber);
+      scale.setExtent(min, max);
+      scale.setInterval(interval);
+    }
+  });
+};
+/**
+ * Radar dimensions is based on the data
+ * @type {Array}
+ */
+
+
+Radar.dimensions = [];
+
+Radar.create = function (ecModel, api) {
+  var radarList = [];
+  ecModel.eachComponent('radar', function (radarModel) {
+    var radar = new Radar(radarModel, ecModel, api);
+    radarList.push(radar);
+    radarModel.coordinateSystem = radar;
+  });
+  ecModel.eachSeriesByType('radar', function (radarSeries) {
+    if (radarSeries.get('coordinateSystem') === 'radar') {
+      // Inject coordinate system
+      radarSeries.coordinateSystem = radarList[radarSeries.get('radarIndex') || 0];
+    }
+  });
+  return radarList;
+};
+
+CoordinateSystemManager.register('radar', Radar);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var valueAxisDefault = axisDefault.valueAxis;
+
+function defaultsShow(opt, show) {
+  return defaults({
+    show: show
+  }, opt);
+}
+
+var RadarModel = extendComponentModel({
+  type: 'radar',
+  optionUpdated: function () {
+    var boundaryGap = this.get('boundaryGap');
+    var splitNumber = this.get('splitNumber');
+    var scale = this.get('scale');
+    var axisLine = this.get('axisLine');
+    var axisTick = this.get('axisTick');
+    var axisType = this.get('axisType');
+    var axisLabel = this.get('axisLabel');
+    var nameTextStyle = this.get('name');
+    var showName = this.get('name.show');
+    var nameFormatter = this.get('name.formatter');
+    var nameGap = this.get('nameGap');
+    var triggerEvent = this.get('triggerEvent');
+    var indicatorModels = map(this.get('indicator') || [], function (indicatorOpt) {
+      // PENDING
+      if (indicatorOpt.max != null && indicatorOpt.max > 0 && !indicatorOpt.min) {
+        indicatorOpt.min = 0;
+      } else if (indicatorOpt.min != null && indicatorOpt.min < 0 && !indicatorOpt.max) {
+        indicatorOpt.max = 0;
+      }
+
+      var iNameTextStyle = nameTextStyle;
+
+      if (indicatorOpt.color != null) {
+        iNameTextStyle = defaults({
+          color: indicatorOpt.color
+        }, nameTextStyle);
+      } // Use same configuration
+
+
+      indicatorOpt = merge(clone(indicatorOpt), {
+        boundaryGap: boundaryGap,
+        splitNumber: splitNumber,
+        scale: scale,
+        axisLine: axisLine,
+        axisTick: axisTick,
+        axisType: axisType,
+        axisLabel: axisLabel,
+        // Compatible with 2 and use text
+        name: indicatorOpt.text,
+        nameLocation: 'end',
+        nameGap: nameGap,
+        // min: 0,
+        nameTextStyle: iNameTextStyle,
+        triggerEvent: triggerEvent
+      }, false);
+
+      if (!showName) {
+        indicatorOpt.name = '';
+      }
+
+      if (typeof nameFormatter === 'string') {
+        var indName = indicatorOpt.name;
+        indicatorOpt.name = nameFormatter.replace('{value}', indName != null ? indName : '');
+      } else if (typeof nameFormatter === 'function') {
+        indicatorOpt.name = nameFormatter(indicatorOpt.name, indicatorOpt);
+      }
+
+      var model = extend(new Model(indicatorOpt, null, this.ecModel), axisModelCommonMixin); // For triggerEvent.
+
+      model.mainType = 'radar';
+      model.componentIndex = this.componentIndex;
+      return model;
+    }, this);
+
+    this.getIndicatorModels = function () {
+      return indicatorModels;
+    };
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 0,
+    center: ['50%', '50%'],
+    radius: '75%',
+    startAngle: 90,
+    name: {
+      show: true // formatter: null
+      // textStyle: {}
+
+    },
+    boundaryGap: [0, 0],
+    splitNumber: 5,
+    nameGap: 15,
+    scale: false,
+    // Polygon or circle
+    shape: 'polygon',
+    axisLine: merge({
+      lineStyle: {
+        color: '#bbb'
+      }
+    }, valueAxisDefault.axisLine),
+    axisLabel: defaultsShow(valueAxisDefault.axisLabel, false),
+    axisTick: defaultsShow(valueAxisDefault.axisTick, false),
+    axisType: 'interval',
+    splitLine: defaultsShow(valueAxisDefault.splitLine, true),
+    splitArea: defaultsShow(valueAxisDefault.splitArea, true),
+    // {text, min, max}
+    indicator: []
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var axisBuilderAttrs$1 = ['axisLine', 'axisTickLabel', 'axisName'];
+extendComponentView({
+  type: 'radar',
+  render: function (radarModel, ecModel, api) {
+    var group = this.group;
+    group.removeAll();
+
+    this._buildAxes(radarModel);
+
+    this._buildSplitLineAndArea(radarModel);
+  },
+  _buildAxes: function (radarModel) {
+    var radar = radarModel.coordinateSystem;
+    var indicatorAxes = radar.getIndicatorAxes();
+    var axisBuilders = map(indicatorAxes, function (indicatorAxis) {
+      var axisBuilder = new AxisBuilder(indicatorAxis.model, {
+        position: [radar.cx, radar.cy],
+        rotation: indicatorAxis.angle,
+        labelDirection: -1,
+        tickDirection: -1,
+        nameDirection: 1
+      });
+      return axisBuilder;
+    });
+    each$1(axisBuilders, function (axisBuilder) {
+      each$1(axisBuilderAttrs$1, axisBuilder.add, axisBuilder);
+      this.group.add(axisBuilder.getGroup());
+    }, this);
+  },
+  _buildSplitLineAndArea: function (radarModel) {
+    var radar = radarModel.coordinateSystem;
+    var indicatorAxes = radar.getIndicatorAxes();
+
+    if (!indicatorAxes.length) {
+      return;
+    }
+
+    var shape = radarModel.get('shape');
+    var splitLineModel = radarModel.getModel('splitLine');
+    var splitAreaModel = radarModel.getModel('splitArea');
+    var lineStyleModel = splitLineModel.getModel('lineStyle');
+    var areaStyleModel = splitAreaModel.getModel('areaStyle');
+    var showSplitLine = splitLineModel.get('show');
+    var showSplitArea = splitAreaModel.get('show');
+    var splitLineColors = lineStyleModel.get('color');
+    var splitAreaColors = areaStyleModel.get('color');
+    splitLineColors = isArray(splitLineColors) ? splitLineColors : [splitLineColors];
+    splitAreaColors = isArray(splitAreaColors) ? splitAreaColors : [splitAreaColors];
+    var splitLines = [];
+    var splitAreas = [];
+
+    function getColorIndex(areaOrLine, areaOrLineColorList, idx) {
+      var colorIndex = idx % areaOrLineColorList.length;
+      areaOrLine[colorIndex] = areaOrLine[colorIndex] || [];
+      return colorIndex;
+    }
+
+    if (shape === 'circle') {
+      var ticksRadius = indicatorAxes[0].getTicksCoords();
+      var cx = radar.cx;
+      var cy = radar.cy;
+
+      for (var i = 0; i < ticksRadius.length; i++) {
+        if (showSplitLine) {
+          var colorIndex = getColorIndex(splitLines, splitLineColors, i);
+          splitLines[colorIndex].push(new Circle({
+            shape: {
+              cx: cx,
+              cy: cy,
+              r: ticksRadius[i].coord
+            }
+          }));
+        }
+
+        if (showSplitArea && i < ticksRadius.length - 1) {
+          var colorIndex = getColorIndex(splitAreas, splitAreaColors, i);
+          splitAreas[colorIndex].push(new Ring({
+            shape: {
+              cx: cx,
+              cy: cy,
+              r0: ticksRadius[i].coord,
+              r: ticksRadius[i + 1].coord
+            }
+          }));
+        }
+      }
+    } // Polyyon
+    else {
+        var realSplitNumber;
+        var axesTicksPoints = map(indicatorAxes, function (indicatorAxis, idx) {
+          var ticksCoords = indicatorAxis.getTicksCoords();
+          realSplitNumber = realSplitNumber == null ? ticksCoords.length - 1 : Math.min(ticksCoords.length - 1, realSplitNumber);
+          return map(ticksCoords, function (tickCoord) {
+            return radar.coordToPoint(tickCoord.coord, idx);
+          });
+        });
+        var prevPoints = [];
+
+        for (var i = 0; i <= realSplitNumber; i++) {
+          var points = [];
+
+          for (var j = 0; j < indicatorAxes.length; j++) {
+            points.push(axesTicksPoints[j][i]);
+          } // Close
+
+
+          if (points[0]) {
+            points.push(points[0].slice());
+          } else {}
+
+          if (showSplitLine) {
+            var colorIndex = getColorIndex(splitLines, splitLineColors, i);
+            splitLines[colorIndex].push(new Polyline({
+              shape: {
+                points: points
+              }
+            }));
+          }
+
+          if (showSplitArea && prevPoints) {
+            var colorIndex = getColorIndex(splitAreas, splitAreaColors, i - 1);
+            splitAreas[colorIndex].push(new Polygon({
+              shape: {
+                points: points.concat(prevPoints)
+              }
+            }));
+          }
+
+          prevPoints = points.slice().reverse();
+        }
+      }
+
+    var lineStyle = lineStyleModel.getLineStyle();
+    var areaStyle = areaStyleModel.getAreaStyle(); // Add splitArea before splitLine
+
+    each$1(splitAreas, function (splitAreas, idx) {
+      this.group.add(mergePath(splitAreas, {
+        style: defaults({
+          stroke: 'none',
+          fill: splitAreaColors[idx % splitAreaColors.length]
+        }, areaStyle),
+        silent: true
+      }));
+    }, this);
+    each$1(splitLines, function (splitLines, idx) {
+      this.group.add(mergePath(splitLines, {
+        style: defaults({
+          fill: 'none',
+          stroke: splitLineColors[idx % splitLineColors.length]
+        }, lineStyle),
+        silent: true
+      }));
+    }, this);
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var RadarSeries = SeriesModel.extend({
+  type: 'series.radar',
+  dependencies: ['radar'],
+  // Overwrite
+  init: function (option) {
+    RadarSeries.superApply(this, 'init', arguments); // Enable legend selection for each data item
+    // Use a function instead of direct access because data reference may changed
+
+    this.legendVisualProvider = new LegendVisualProvider(bind(this.getData, this), bind(this.getRawData, this));
+  },
+  getInitialData: function (option, ecModel) {
+    return createListSimply(this, {
+      generateCoord: 'indicator_',
+      generateCoordCount: Infinity
+    });
+  },
+  formatTooltip: function (dataIndex, multipleSeries, dataType, renderMode) {
+    var data = this.getData();
+    var coordSys = this.coordinateSystem;
+    var indicatorAxes = coordSys.getIndicatorAxes();
+    var name = this.getData().getName(dataIndex);
+    var newLine = renderMode === 'html' ? '<br/>' : '\n';
+    return encodeHTML(name === '' ? this.name : name) + newLine + map(indicatorAxes, function (axis, idx) {
+      var val = data.get(data.mapDimension(axis.dim), dataIndex);
+      return encodeHTML(axis.name + ' : ' + val);
+    }).join(newLine);
+  },
+
+  /**
+   * @implement
+   */
+  getTooltipPosition: function (dataIndex) {
+    if (dataIndex != null) {
+      var data = this.getData();
+      var coordSys = this.coordinateSystem;
+      var values = data.getValues(map(coordSys.dimensions, function (dim) {
+        return data.mapDimension(dim);
+      }), dataIndex, true);
+
+      for (var i = 0, len = values.length; i < len; i++) {
+        if (!isNaN(values[i])) {
+          var indicatorAxes = coordSys.getIndicatorAxes();
+          return coordSys.coordToPoint(indicatorAxes[i].dataToCoord(values[i]), i);
+        }
+      }
+    }
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 2,
+    coordinateSystem: 'radar',
+    legendHoverLink: true,
+    radarIndex: 0,
+    lineStyle: {
+      width: 2,
+      type: 'solid'
+    },
+    label: {
+      position: 'top'
+    },
+    // areaStyle: {
+    // },
+    // itemStyle: {}
+    symbol: 'emptyCircle',
+    symbolSize: 4 // symbolRotate: null
+
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function normalizeSymbolSize(symbolSize) {
+  if (!isArray(symbolSize)) {
+    symbolSize = [+symbolSize, +symbolSize];
+  }
+
+  return symbolSize;
+}
+
+extendChartView({
+  type: 'radar',
+  render: function (seriesModel, ecModel, api) {
+    var polar = seriesModel.coordinateSystem;
+    var group = this.group;
+    var data = seriesModel.getData();
+    var oldData = this._data;
+
+    function createSymbol$$1(data, idx) {
+      var symbolType = data.getItemVisual(idx, 'symbol') || 'circle';
+      var color = data.getItemVisual(idx, 'color');
+
+      if (symbolType === 'none') {
+        return;
+      }
+
+      var symbolSize = normalizeSymbolSize(data.getItemVisual(idx, 'symbolSize'));
+      var symbolPath = createSymbol(symbolType, -1, -1, 2, 2, color);
+      var symbolRotate = data.getItemVisual(idx, 'symbolRotate') || 0;
+      symbolPath.attr({
+        style: {
+          strokeNoScale: true
+        },
+        z2: 100,
+        scale: [symbolSize[0] / 2, symbolSize[1] / 2],
+        rotation: symbolRotate * Math.PI / 180 || 0
+      });
+      return symbolPath;
+    }
+
+    function updateSymbols(oldPoints, newPoints, symbolGroup, data, idx, isInit) {
+      // Simply rerender all
+      symbolGroup.removeAll();
+
+      for (var i = 0; i < newPoints.length - 1; i++) {
+        var symbolPath = createSymbol$$1(data, idx);
+
+        if (symbolPath) {
+          symbolPath.__dimIdx = i;
+
+          if (oldPoints[i]) {
+            symbolPath.attr('position', oldPoints[i]);
+            graphic[isInit ? 'initProps' : 'updateProps'](symbolPath, {
+              position: newPoints[i]
+            }, seriesModel, idx);
+          } else {
+            symbolPath.attr('position', newPoints[i]);
+          }
+
+          symbolGroup.add(symbolPath);
+        }
+      }
+    }
+
+    function getInitialPoints(points) {
+      return map(points, function (pt) {
+        return [polar.cx, polar.cy];
+      });
+    }
+
+    data.diff(oldData).add(function (idx) {
+      var points = data.getItemLayout(idx);
+
+      if (!points) {
+        return;
+      }
+
+      var polygon = new Polygon();
+      var polyline = new Polyline();
+      var target = {
+        shape: {
+          points: points
+        }
+      };
+      polygon.shape.points = getInitialPoints(points);
+      polyline.shape.points = getInitialPoints(points);
+      initProps(polygon, target, seriesModel, idx);
+      initProps(polyline, target, seriesModel, idx);
+      var itemGroup = new Group();
+      var symbolGroup = new Group();
+      itemGroup.add(polyline);
+      itemGroup.add(polygon);
+      itemGroup.add(symbolGroup);
+      updateSymbols(polyline.shape.points, points, symbolGroup, data, idx, true);
+      data.setItemGraphicEl(idx, itemGroup);
+    }).update(function (newIdx, oldIdx) {
+      var itemGroup = oldData.getItemGraphicEl(oldIdx);
+      var polyline = itemGroup.childAt(0);
+      var polygon = itemGroup.childAt(1);
+      var symbolGroup = itemGroup.childAt(2);
+      var target = {
+        shape: {
+          points: data.getItemLayout(newIdx)
+        }
+      };
+
+      if (!target.shape.points) {
+        return;
+      }
+
+      updateSymbols(polyline.shape.points, target.shape.points, symbolGroup, data, newIdx, false);
+      updateProps(polyline, target, seriesModel);
+      updateProps(polygon, target, seriesModel);
+      data.setItemGraphicEl(newIdx, itemGroup);
+    }).remove(function (idx) {
+      group.remove(oldData.getItemGraphicEl(idx));
+    }).execute();
+    data.eachItemGraphicEl(function (itemGroup, idx) {
+      var itemModel = data.getItemModel(idx);
+      var polyline = itemGroup.childAt(0);
+      var polygon = itemGroup.childAt(1);
+      var symbolGroup = itemGroup.childAt(2);
+      var color = data.getItemVisual(idx, 'color');
+      group.add(itemGroup);
+      polyline.useStyle(defaults(itemModel.getModel('lineStyle').getLineStyle(), {
+        fill: 'none',
+        stroke: color
+      }));
+      polyline.hoverStyle = itemModel.getModel('emphasis.lineStyle').getLineStyle();
+      var areaStyleModel = itemModel.getModel('areaStyle');
+      var hoverAreaStyleModel = itemModel.getModel('emphasis.areaStyle');
+      var polygonIgnore = areaStyleModel.isEmpty() && areaStyleModel.parentModel.isEmpty();
+      var hoverPolygonIgnore = hoverAreaStyleModel.isEmpty() && hoverAreaStyleModel.parentModel.isEmpty();
+      hoverPolygonIgnore = hoverPolygonIgnore && polygonIgnore;
+      polygon.ignore = polygonIgnore;
+      polygon.useStyle(defaults(areaStyleModel.getAreaStyle(), {
+        fill: color,
+        opacity: 0.7
+      }));
+      polygon.hoverStyle = hoverAreaStyleModel.getAreaStyle();
+      var itemStyle = itemModel.getModel('itemStyle').getItemStyle(['color']);
+      var itemHoverStyle = itemModel.getModel('emphasis.itemStyle').getItemStyle();
+      var labelModel = itemModel.getModel('label');
+      var labelHoverModel = itemModel.getModel('emphasis.label');
+      symbolGroup.eachChild(function (symbolPath) {
+        symbolPath.setStyle(itemStyle);
+        symbolPath.hoverStyle = clone(itemHoverStyle);
+        var defaultText = data.get(data.dimensions[symbolPath.__dimIdx], idx);
+        (defaultText == null || isNaN(defaultText)) && (defaultText = '');
+        setLabelStyle(symbolPath.style, symbolPath.hoverStyle, labelModel, labelHoverModel, {
+          labelFetcher: data.hostModel,
+          labelDataIndex: idx,
+          labelDimIndex: symbolPath.__dimIdx,
+          defaultText: defaultText,
+          autoColor: color,
+          isRectText: true
+        });
+      });
+
+      itemGroup.highDownOnUpdate = function (fromState, toState) {
+        polygon.attr('ignore', toState === 'emphasis' ? hoverPolygonIgnore : polygonIgnore);
+      };
+
+      setHoverStyle(itemGroup);
+    });
+    this._data = data;
+  },
+  remove: function () {
+    this.group.removeAll();
+    this._data = null;
+  },
+  dispose: function () {}
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var radarLayout = function (ecModel) {
+  ecModel.eachSeriesByType('radar', function (seriesModel) {
+    var data = seriesModel.getData();
+    var points = [];
+    var coordSys = seriesModel.coordinateSystem;
+
+    if (!coordSys) {
+      return;
+    }
+
+    var axes = coordSys.getIndicatorAxes();
+    each$1(axes, function (axis, axisIndex) {
+      data.each(data.mapDimension(axes[axisIndex].dim), function (val, dataIndex) {
+        points[dataIndex] = points[dataIndex] || [];
+        var point = coordSys.dataToPoint(val, axisIndex);
+        points[dataIndex][axisIndex] = isValidPoint(point) ? point : getValueMissingPoint(coordSys);
+      });
+    }); // Close polygon
+
+    data.each(function (idx) {
+      // TODO
+      // Is it appropriate to connect to the next data when some data is missing?
+      // Or, should trade it like `connectNull` in line chart?
+      var firstPoint = find(points[idx], function (point) {
+        return isValidPoint(point);
+      }) || getValueMissingPoint(coordSys); // Copy the first actual point to the end of the array
+
+      points[idx].push(firstPoint.slice());
+      data.setItemLayout(idx, points[idx]);
+    });
+  });
+};
+
+function isValidPoint(point) {
+  return !isNaN(point[0]) && !isNaN(point[1]);
+}
+
+function getValueMissingPoint(coordSys) {
+  // It is error-prone to input [NaN, NaN] into polygon, polygon.
+  // (probably cause problem when refreshing or animating)
+  return [coordSys.cx, coordSys.cy];
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// Backward compat for radar chart in 2
+var backwardCompat$1 = function (option) {
+  var polarOptArr = option.polar;
+
+  if (polarOptArr) {
+    if (!isArray(polarOptArr)) {
+      polarOptArr = [polarOptArr];
+    }
+
+    var polarNotRadar = [];
+    each$1(polarOptArr, function (polarOpt, idx) {
+      if (polarOpt.indicator) {
+        if (polarOpt.type && !polarOpt.shape) {
+          polarOpt.shape = polarOpt.type;
+        }
+
+        option.radar = option.radar || [];
+
+        if (!isArray(option.radar)) {
+          option.radar = [option.radar];
+        }
+
+        option.radar.push(polarOpt);
+      } else {
+        polarNotRadar.push(polarOpt);
+      }
+    });
+    option.polar = polarNotRadar;
+  }
+
+  each$1(option.series, function (seriesOpt) {
+    if (seriesOpt && seriesOpt.type === 'radar' && seriesOpt.polarIndex) {
+      seriesOpt.radarIndex = seriesOpt.polarIndex;
+    }
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(dataColor('radar'));
+registerVisual(visualSymbol('radar', 'circle'));
+registerLayout(radarLayout);
+registerProcessor(dataFilter('radar'));
+registerPreprocessor(backwardCompat$1);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+SeriesModel.extend({
+  type: 'series.heatmap',
+  getInitialData: function (option, ecModel) {
+    return createListFromArray(this.getSource(), this, {
+      generateCoord: 'value'
+    });
+  },
+  preventIncremental: function () {
+    var coordSysCreator = CoordinateSystemManager.get(this.get('coordinateSystem'));
+
+    if (coordSysCreator && coordSysCreator.dimensions) {
+      return coordSysCreator.dimensions[0] === 'lng' && coordSysCreator.dimensions[1] === 'lat';
+    }
+  },
+  defaultOption: {
+    // Cartesian2D or geo
+    coordinateSystem: 'cartesian2d',
+    zlevel: 0,
+    z: 2,
+    // Cartesian coordinate system
+    // xAxisIndex: 0,
+    // yAxisIndex: 0,
+    // Geo coordinate system
+    geoIndex: 0,
+    blurSize: 30,
+    pointSize: 20,
+    maxOpacity: 1,
+    minOpacity: 0
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/* global Uint8ClampedArray */
+var GRADIENT_LEVELS = 256;
+/**
+ * Heatmap Chart
+ *
+ * @class
+ */
+
+function Heatmap() {
+  var canvas = createCanvas();
+  this.canvas = canvas;
+  this.blurSize = 30;
+  this.pointSize = 20;
+  this.maxOpacity = 1;
+  this.minOpacity = 0;
+  this._gradientPixels = {};
+}
+
+Heatmap.prototype = {
+  /**
+   * Renders Heatmap and returns the rendered canvas
+   * @param {Array} data array of data, each has x, y, value
+   * @param {number} width canvas width
+   * @param {number} height canvas height
+   */
+  update: function (data, width, height, normalize, colorFunc, isInRange) {
+    var brush = this._getBrush();
+
+    var gradientInRange = this._getGradient(data, colorFunc, 'inRange');
+
+    var gradientOutOfRange = this._getGradient(data, colorFunc, 'outOfRange');
+
+    var r = this.pointSize + this.blurSize;
+    var canvas = this.canvas;
+    var ctx = canvas.getContext('2d');
+    var len = data.length;
+    canvas.width = width;
+    canvas.height = height;
+
+    for (var i = 0; i < len; ++i) {
+      var p = data[i];
+      var x = p[0];
+      var y = p[1];
+      var value = p[2]; // calculate alpha using value
+
+      var alpha = normalize(value); // draw with the circle brush with alpha
+
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(brush, x - r, y - r);
+    }
+
+    if (!canvas.width || !canvas.height) {
+      // Avoid "Uncaught DOMException: Failed to execute 'getImageData' on
+      // 'CanvasRenderingContext2D': The source height is 0."
+      return canvas;
+    } // colorize the canvas using alpha value and set with gradient
+
+
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var pixels = imageData.data;
+    var offset = 0;
+    var pixelLen = pixels.length;
+    var minOpacity = this.minOpacity;
+    var maxOpacity = this.maxOpacity;
+    var diffOpacity = maxOpacity - minOpacity;
+
+    while (offset < pixelLen) {
+      var alpha = pixels[offset + 3] / 256;
+      var gradientOffset = Math.floor(alpha * (GRADIENT_LEVELS - 1)) * 4; // Simple optimize to ignore the empty data
+
+      if (alpha > 0) {
+        var gradient = isInRange(alpha) ? gradientInRange : gradientOutOfRange; // Any alpha > 0 will be mapped to [minOpacity, maxOpacity]
+
+        alpha > 0 && (alpha = alpha * diffOpacity + minOpacity);
+        pixels[offset++] = gradient[gradientOffset];
+        pixels[offset++] = gradient[gradientOffset + 1];
+        pixels[offset++] = gradient[gradientOffset + 2];
+        pixels[offset++] = gradient[gradientOffset + 3] * alpha * 256;
+      } else {
+        offset += 4;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  },
+
+  /**
+   * get canvas of a black circle brush used for canvas to draw later
+   * @private
+   * @returns {Object} circle brush canvas
+   */
+  _getBrush: function () {
+    var brushCanvas = this._brushCanvas || (this._brushCanvas = createCanvas()); // set brush size
+
+    var r = this.pointSize + this.blurSize;
+    var d = r * 2;
+    brushCanvas.width = d;
+    brushCanvas.height = d;
+    var ctx = brushCanvas.getContext('2d');
+    ctx.clearRect(0, 0, d, d); // in order to render shadow without the distinct circle,
+    // draw the distinct circle in an invisible place,
+    // and use shadowOffset to draw shadow in the center of the canvas
+
+    ctx.shadowOffsetX = d;
+    ctx.shadowBlur = this.blurSize; // draw the shadow in black, and use alpha and shadow blur to generate
+    // color in color map
+
+    ctx.shadowColor = '#000'; // draw circle in the left to the canvas
+
+    ctx.beginPath();
+    ctx.arc(-r, r, this.pointSize, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.fill();
+    return brushCanvas;
+  },
+
+  /**
+   * get gradient color map
+   * @private
+   */
+  _getGradient: function (data, colorFunc, state) {
+    var gradientPixels = this._gradientPixels;
+    var pixelsSingleState = gradientPixels[state] || (gradientPixels[state] = new Uint8ClampedArray(256 * 4));
+    var color = [0, 0, 0, 0];
+    var off = 0;
+
+    for (var i = 0; i < 256; i++) {
+      colorFunc[state](i / 255, true, color);
+      pixelsSingleState[off++] = color[0];
+      pixelsSingleState[off++] = color[1];
+      pixelsSingleState[off++] = color[2];
+      pixelsSingleState[off++] = color[3];
+    }
+
+    return pixelsSingleState;
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function getIsInPiecewiseRange(dataExtent, pieceList, selected) {
+  var dataSpan = dataExtent[1] - dataExtent[0];
+  pieceList = map(pieceList, function (piece) {
+    return {
+      interval: [(piece.interval[0] - dataExtent[0]) / dataSpan, (piece.interval[1] - dataExtent[0]) / dataSpan]
+    };
+  });
+  var len = pieceList.length;
+  var lastIndex = 0;
+  return function (val) {
+    // Try to find in the location of the last found
+    for (var i = lastIndex; i < len; i++) {
+      var interval = pieceList[i].interval;
+
+      if (interval[0] <= val && val <= interval[1]) {
+        lastIndex = i;
+        break;
+      }
+    }
+
+    if (i === len) {
+      // Not found, back interation
+      for (var i = lastIndex - 1; i >= 0; i--) {
+        var interval = pieceList[i].interval;
+
+        if (interval[0] <= val && val <= interval[1]) {
+          lastIndex = i;
+          break;
+        }
+      }
+    }
+
+    return i >= 0 && i < len && selected[i];
+  };
+}
+
+function getIsInContinuousRange(dataExtent, range) {
+  var dataSpan = dataExtent[1] - dataExtent[0];
+  range = [(range[0] - dataExtent[0]) / dataSpan, (range[1] - dataExtent[0]) / dataSpan];
+  return function (val) {
+    return val >= range[0] && val <= range[1];
+  };
+}
+
+function isGeoCoordSys(coordSys) {
+  var dimensions = coordSys.dimensions; // Not use coorSys.type === 'geo' because coordSys maybe extended
+
+  return dimensions[0] === 'lng' && dimensions[1] === 'lat';
+}
+
+extendChartView({
+  type: 'heatmap',
+  render: function (seriesModel, ecModel, api) {
+    var visualMapOfThisSeries;
+    ecModel.eachComponent('visualMap', function (visualMap) {
+      visualMap.eachTargetSeries(function (targetSeries) {
+        if (targetSeries === seriesModel) {
+          visualMapOfThisSeries = visualMap;
+        }
+      });
+    });
+    this.group.removeAll();
+    this._incrementalDisplayable = null;
+    var coordSys = seriesModel.coordinateSystem;
+
+    if (coordSys.type === 'cartesian2d' || coordSys.type === 'calendar') {
+      this._renderOnCartesianAndCalendar(seriesModel, api, 0, seriesModel.getData().count());
+    } else if (isGeoCoordSys(coordSys)) {
+      this._renderOnGeo(coordSys, seriesModel, visualMapOfThisSeries, api);
+    }
+  },
+  incrementalPrepareRender: function (seriesModel, ecModel, api) {
+    this.group.removeAll();
+  },
+  incrementalRender: function (params, seriesModel, ecModel, api) {
+    var coordSys = seriesModel.coordinateSystem;
+
+    if (coordSys) {
+      this._renderOnCartesianAndCalendar(seriesModel, api, params.start, params.end, true);
+    }
+  },
+  _renderOnCartesianAndCalendar: function (seriesModel, api, start, end, incremental) {
+    var coordSys = seriesModel.coordinateSystem;
+    var width;
+    var height;
+
+    if (coordSys.type === 'cartesian2d') {
+      var xAxis = coordSys.getAxis('x');
+      var yAxis = coordSys.getAxis('y');
+      width = xAxis.getBandWidth();
+      height = yAxis.getBandWidth();
+    }
+
+    var group = this.group;
+    var data = seriesModel.getData();
+    var itemStyleQuery = 'itemStyle';
+    var hoverItemStyleQuery = 'emphasis.itemStyle';
+    var labelQuery = 'label';
+    var hoverLabelQuery = 'emphasis.label';
+    var style = seriesModel.getModel(itemStyleQuery).getItemStyle(['color']);
+    var hoverStl = seriesModel.getModel(hoverItemStyleQuery).getItemStyle();
+    var labelModel = seriesModel.getModel(labelQuery);
+    var hoverLabelModel = seriesModel.getModel(hoverLabelQuery);
+    var coordSysType = coordSys.type;
+    var dataDims = coordSysType === 'cartesian2d' ? [data.mapDimension('x'), data.mapDimension('y'), data.mapDimension('value')] : [data.mapDimension('time'), data.mapDimension('value')];
+
+    for (var idx = start; idx < end; idx++) {
+      var rect;
+
+      if (coordSysType === 'cartesian2d') {
+        // Ignore empty data
+        if (isNaN(data.get(dataDims[2], idx))) {
+          continue;
+        }
+
+        var point = coordSys.dataToPoint([data.get(dataDims[0], idx), data.get(dataDims[1], idx)]);
+        rect = new Rect({
+          shape: {
+            x: Math.floor(Math.round(point[0]) - width / 2),
+            y: Math.floor(Math.round(point[1]) - height / 2),
+            width: Math.ceil(width),
+            height: Math.ceil(height)
+          },
+          style: {
+            fill: data.getItemVisual(idx, 'color'),
+            opacity: data.getItemVisual(idx, 'opacity')
+          }
+        });
+      } else {
+        // Ignore empty data
+        if (isNaN(data.get(dataDims[1], idx))) {
+          continue;
+        }
+
+        rect = new Rect({
+          z2: 1,
+          shape: coordSys.dataToRect([data.get(dataDims[0], idx)]).contentShape,
+          style: {
+            fill: data.getItemVisual(idx, 'color'),
+            opacity: data.getItemVisual(idx, 'opacity')
+          }
+        });
+      }
+
+      var itemModel = data.getItemModel(idx); // Optimization for large datset
+
+      if (data.hasItemOption) {
+        style = itemModel.getModel(itemStyleQuery).getItemStyle(['color']);
+        hoverStl = itemModel.getModel(hoverItemStyleQuery).getItemStyle();
+        labelModel = itemModel.getModel(labelQuery);
+        hoverLabelModel = itemModel.getModel(hoverLabelQuery);
+      }
+
+      var rawValue = seriesModel.getRawValue(idx);
+      var defaultText = '-';
+
+      if (rawValue && rawValue[2] != null) {
+        defaultText = rawValue[2];
+      }
+
+      setLabelStyle(style, hoverStl, labelModel, hoverLabelModel, {
+        labelFetcher: seriesModel,
+        labelDataIndex: idx,
+        defaultText: defaultText,
+        isRectText: true
+      });
+      rect.setStyle(style);
+      setHoverStyle(rect, data.hasItemOption ? hoverStl : extend({}, hoverStl));
+      rect.incremental = incremental; // PENDING
+
+      if (incremental) {
+        // Rect must use hover layer if it's incremental.
+        rect.useHoverLayer = true;
+      }
+
+      group.add(rect);
+      data.setItemGraphicEl(idx, rect);
+    }
+  },
+  _renderOnGeo: function (geo, seriesModel, visualMapModel, api) {
+    var inRangeVisuals = visualMapModel.targetVisuals.inRange;
+    var outOfRangeVisuals = visualMapModel.targetVisuals.outOfRange; // if (!visualMapping) {
+    //     throw new Error('Data range must have color visuals');
+    // }
+
+    var data = seriesModel.getData();
+    var hmLayer = this._hmLayer || this._hmLayer || new Heatmap();
+    hmLayer.blurSize = seriesModel.get('blurSize');
+    hmLayer.pointSize = seriesModel.get('pointSize');
+    hmLayer.minOpacity = seriesModel.get('minOpacity');
+    hmLayer.maxOpacity = seriesModel.get('maxOpacity');
+    var rect = geo.getViewRect().clone();
+    var roamTransform = geo.getRoamTransform();
+    rect.applyTransform(roamTransform); // Clamp on viewport
+
+    var x = Math.max(rect.x, 0);
+    var y = Math.max(rect.y, 0);
+    var x2 = Math.min(rect.width + rect.x, api.getWidth());
+    var y2 = Math.min(rect.height + rect.y, api.getHeight());
+    var width = x2 - x;
+    var height = y2 - y;
+    var dims = [data.mapDimension('lng'), data.mapDimension('lat'), data.mapDimension('value')];
+    var points = data.mapArray(dims, function (lng, lat, value) {
+      var pt = geo.dataToPoint([lng, lat]);
+      pt[0] -= x;
+      pt[1] -= y;
+      pt.push(value);
+      return pt;
+    });
+    var dataExtent = visualMapModel.getExtent();
+    var isInRange = visualMapModel.type === 'visualMap.continuous' ? getIsInContinuousRange(dataExtent, visualMapModel.option.range) : getIsInPiecewiseRange(dataExtent, visualMapModel.getPieceList(), visualMapModel.option.selected);
+    hmLayer.update(points, width, height, inRangeVisuals.color.getNormalizer(), {
+      inRange: inRangeVisuals.color.getColorMapper(),
+      outOfRange: outOfRangeVisuals.color.getColorMapper()
+    }, isInRange);
+    var img = new ZImage({
+      style: {
+        width: width,
+        height: height,
+        x: x,
+        y: y,
+        image: hmLayer.canvas
+      },
+      silent: true
+    });
+    this.group.add(img);
+  },
+  dispose: function () {}
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Link lists and struct (graph or tree)
+ */
+var each$7 = each$1;
+var DATAS = '\0__link_datas';
+var MAIN_DATA = '\0__link_mainData'; // Caution:
+// In most case, either list or its shallow clones (see list.cloneShallow)
+// is active in echarts process. So considering heap memory consumption,
+// we do not clone tree or graph, but share them among list and its shallow clones.
+// But in some rare case, we have to keep old list (like do animation in chart). So
+// please take care that both the old list and the new list share the same tree/graph.
+
+/**
+ * @param {Object} opt
+ * @param {module:echarts/data/List} opt.mainData
+ * @param {Object} [opt.struct] For example, instance of Graph or Tree.
+ * @param {string} [opt.structAttr] designation: list[structAttr] = struct;
+ * @param {Object} [opt.datas] {dataType: data},
+ *                 like: {node: nodeList, edge: edgeList}.
+ *                 Should contain mainData.
+ * @param {Object} [opt.datasAttr] {dataType: attr},
+ *                 designation: struct[datasAttr[dataType]] = list;
+ */
+
+function linkList(opt) {
+  var mainData = opt.mainData;
+  var datas = opt.datas;
+
+  if (!datas) {
+    datas = {
+      main: mainData
+    };
+    opt.datasAttr = {
+      main: 'data'
+    };
+  }
+
+  opt.datas = opt.mainData = null;
+  linkAll(mainData, datas, opt); // Porxy data original methods.
+
+  each$7(datas, function (data) {
+    each$7(mainData.TRANSFERABLE_METHODS, function (methodName) {
+      data.wrapMethod(methodName, curry(transferInjection, opt));
+    });
+  }); // Beyond transfer, additional features should be added to `cloneShallow`.
+
+  mainData.wrapMethod('cloneShallow', curry(cloneShallowInjection, opt)); // Only mainData trigger change, because struct.update may trigger
+  // another changable methods, which may bring about dead lock.
+
+  each$7(mainData.CHANGABLE_METHODS, function (methodName) {
+    mainData.wrapMethod(methodName, curry(changeInjection, opt));
+  }); // Make sure datas contains mainData.
+
+  assert$1(datas[mainData.dataType] === mainData);
+}
+
+function transferInjection(opt, res) {
+  if (isMainData(this)) {
+    // Transfer datas to new main data.
+    var datas = extend({}, this[DATAS]);
+    datas[this.dataType] = res;
+    linkAll(res, datas, opt);
+  } else {
+    // Modify the reference in main data to point newData.
+    linkSingle(res, this.dataType, this[MAIN_DATA], opt);
+  }
+
+  return res;
+}
+
+function changeInjection(opt, res) {
+  opt.struct && opt.struct.update(this);
+  return res;
+}
+
+function cloneShallowInjection(opt, res) {
+  // cloneShallow, which brings about some fragilities, may be inappropriate
+  // to be exposed as an API. So for implementation simplicity we can make
+  // the restriction that cloneShallow of not-mainData should not be invoked
+  // outside, but only be invoked here.
+  each$7(res[DATAS], function (data, dataType) {
+    data !== res && linkSingle(data.cloneShallow(), dataType, res, opt);
+  });
+  return res;
+}
+/**
+ * Supplement method to List.
+ *
+ * @public
+ * @param {string} [dataType] If not specified, return mainData.
+ * @return {module:echarts/data/List}
+ */
+
+
+function getLinkedData(dataType) {
+  var mainData = this[MAIN_DATA];
+  return dataType == null || mainData == null ? mainData : mainData[DATAS][dataType];
+}
+
+function isMainData(data) {
+  return data[MAIN_DATA] === data;
+}
+
+function linkAll(mainData, datas, opt) {
+  mainData[DATAS] = {};
+  each$7(datas, function (data, dataType) {
+    linkSingle(data, dataType, mainData, opt);
+  });
+}
+
+function linkSingle(data, dataType, mainData, opt) {
+  mainData[DATAS][dataType] = data;
+  data[MAIN_DATA] = mainData;
+  data.dataType = dataType;
+
+  if (opt.struct) {
+    data[opt.structAttr] = opt.struct;
+    opt.struct[opt.datasAttr[dataType]] = data;
+  } // Supplement method.
+
+
+  data.getLinkedData = getLinkedData;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Tree data structure
+ *
+ * @module echarts/data/Tree
+ */
+/**
+ * @constructor module:echarts/data/Tree~TreeNode
+ * @param {string} name
+ * @param {module:echarts/data/Tree} hostTree
+ */
+
+var TreeNode = function (name, hostTree) {
+  /**
+   * @type {string}
+   */
+  this.name = name || '';
+  /**
+   * Depth of node
+   *
+   * @type {number}
+   * @readOnly
+   */
+
+  this.depth = 0;
+  /**
+   * Height of the subtree rooted at this node.
+   * @type {number}
+   * @readOnly
+   */
+
+  this.height = 0;
+  /**
+   * @type {module:echarts/data/Tree~TreeNode}
+   * @readOnly
+   */
+
+  this.parentNode = null;
+  /**
+   * Reference to list item.
+   * Do not persistent dataIndex outside,
+   * besause it may be changed by list.
+   * If dataIndex -1,
+   * this node is logical deleted (filtered) in list.
+   *
+   * @type {Object}
+   * @readOnly
+   */
+
+  this.dataIndex = -1;
+  /**
+   * @type {Array.<module:echarts/data/Tree~TreeNode>}
+   * @readOnly
+   */
+
+  this.children = [];
+  /**
+   * @type {Array.<module:echarts/data/Tree~TreeNode>}
+   * @pubilc
+   */
+
+  this.viewChildren = [];
+  /**
+   * @type {moduel:echarts/data/Tree}
+   * @readOnly
+   */
+
+  this.hostTree = hostTree;
+};
+
+TreeNode.prototype = {
+  constructor: TreeNode,
+
+  /**
+   * The node is removed.
+   * @return {boolean} is removed.
+   */
+  isRemoved: function () {
+    return this.dataIndex < 0;
+  },
+
+  /**
+   * Travel this subtree (include this node).
+   * Usage:
+   *    node.eachNode(function () { ... }); // preorder
+   *    node.eachNode('preorder', function () { ... }); // preorder
+   *    node.eachNode('postorder', function () { ... }); // postorder
+   *    node.eachNode(
+   *        {order: 'postorder', attr: 'viewChildren'},
+   *        function () { ... }
+   *    ); // postorder
+   *
+   * @param {(Object|string)} options If string, means order.
+   * @param {string=} options.order 'preorder' or 'postorder'
+   * @param {string=} options.attr 'children' or 'viewChildren'
+   * @param {Function} cb If in preorder and return false,
+   *                      its subtree will not be visited.
+   * @param {Object} [context]
+   */
+  eachNode: function (options, cb, context) {
+    if (typeof options === 'function') {
+      context = cb;
+      cb = options;
+      options = null;
+    }
+
+    options = options || {};
+
+    if (isString(options)) {
+      options = {
+        order: options
+      };
+    }
+
+    var order = options.order || 'preorder';
+    var children = this[options.attr || 'children'];
+    var suppressVisitSub;
+    order === 'preorder' && (suppressVisitSub = cb.call(context, this));
+
+    for (var i = 0; !suppressVisitSub && i < children.length; i++) {
+      children[i].eachNode(options, cb, context);
+    }
+
+    order === 'postorder' && cb.call(context, this);
+  },
+
+  /**
+   * Update depth and height of this subtree.
+   *
+   * @param  {number} depth
+   */
+  updateDepthAndHeight: function (depth) {
+    var height = 0;
+    this.depth = depth;
+
+    for (var i = 0; i < this.children.length; i++) {
+      var child = this.children[i];
+      child.updateDepthAndHeight(depth + 1);
+
+      if (child.height > height) {
+        height = child.height;
+      }
+    }
+
+    this.height = height + 1;
+  },
+
+  /**
+   * @param  {string} id
+   * @return {module:echarts/data/Tree~TreeNode}
+   */
+  getNodeById: function (id) {
+    if (this.getId() === id) {
+      return this;
+    }
+
+    for (var i = 0, children = this.children, len = children.length; i < len; i++) {
+      var res = children[i].getNodeById(id);
+
+      if (res) {
+        return res;
+      }
+    }
+  },
+
+  /**
+   * @param {module:echarts/data/Tree~TreeNode} node
+   * @return {boolean}
+   */
+  contains: function (node) {
+    if (node === this) {
+      return true;
+    }
+
+    for (var i = 0, children = this.children, len = children.length; i < len; i++) {
+      var res = children[i].contains(node);
+
+      if (res) {
+        return res;
+      }
+    }
+  },
+
+  /**
+   * @param {boolean} includeSelf Default false.
+   * @return {Array.<module:echarts/data/Tree~TreeNode>} order: [root, child, grandchild, ...]
+   */
+  getAncestors: function (includeSelf) {
+    var ancestors = [];
+    var node = includeSelf ? this : this.parentNode;
+
+    while (node) {
+      ancestors.push(node);
+      node = node.parentNode;
+    }
+
+    ancestors.reverse();
+    return ancestors;
+  },
+
+  /**
+   * @param {string|Array=} [dimension='value'] Default 'value'. can be 0, 1, 2, 3
+   * @return {number} Value.
+   */
+  getValue: function (dimension) {
+    var data = this.hostTree.data;
+    return data.get(data.getDimension(dimension || 'value'), this.dataIndex);
+  },
+
+  /**
+   * @param {Object} layout
+   * @param {boolean=} [merge=false]
+   */
+  setLayout: function (layout, merge$$1) {
+    this.dataIndex >= 0 && this.hostTree.data.setItemLayout(this.dataIndex, layout, merge$$1);
+  },
+
+  /**
+   * @return {Object} layout
+   */
+  getLayout: function () {
+    return this.hostTree.data.getItemLayout(this.dataIndex);
+  },
+
+  /**
+   * @param {string} [path]
+   * @return {module:echarts/model/Model}
+   */
+  getModel: function (path) {
+    if (this.dataIndex < 0) {
+      return;
+    }
+
+    var hostTree = this.hostTree;
+    var itemModel = hostTree.data.getItemModel(this.dataIndex);
+    return itemModel.getModel(path);
+  },
+
+  /**
+   * @example
+   *  setItemVisual('color', color);
+   *  setItemVisual({
+   *      'color': color
+   *  });
+   */
+  setVisual: function (key, value) {
+    this.dataIndex >= 0 && this.hostTree.data.setItemVisual(this.dataIndex, key, value);
+  },
+
+  /**
+   * Get item visual
+   */
+  getVisual: function (key, ignoreParent) {
+    return this.hostTree.data.getItemVisual(this.dataIndex, key, ignoreParent);
+  },
+
+  /**
+   * @public
+   * @return {number}
+   */
+  getRawIndex: function () {
+    return this.hostTree.data.getRawIndex(this.dataIndex);
+  },
+
+  /**
+   * @public
+   * @return {string}
+   */
+  getId: function () {
+    return this.hostTree.data.getId(this.dataIndex);
+  },
+
+  /**
+   * if this is an ancestor of another node
+   *
+   * @public
+   * @param {TreeNode} node another node
+   * @return {boolean} if is ancestor
+   */
+  isAncestorOf: function (node) {
+    var parent = node.parentNode;
+
+    while (parent) {
+      if (parent === this) {
+        return true;
+      }
+
+      parent = parent.parentNode;
+    }
+
+    return false;
+  },
+
+  /**
+   * if this is an descendant of another node
+   *
+   * @public
+   * @param {TreeNode} node another node
+   * @return {boolean} if is descendant
+   */
+  isDescendantOf: function (node) {
+    return node !== this && node.isAncestorOf(this);
+  }
+};
+/**
+ * @constructor
+ * @alias module:echarts/data/Tree
+ * @param {module:echarts/model/Model} hostModel
+ */
+
+function Tree(hostModel) {
+  /**
+   * @type {module:echarts/data/Tree~TreeNode}
+   * @readOnly
+   */
+  this.root;
+  /**
+   * @type {module:echarts/data/List}
+   * @readOnly
+   */
+
+  this.data;
+  /**
+   * Index of each item is the same as the raw index of coresponding list item.
+   * @private
+   * @type {Array.<module:echarts/data/Tree~TreeNode}
+   */
+
+  this._nodes = [];
+  /**
+   * @private
+   * @readOnly
+   * @type {module:echarts/model/Model}
+   */
+
+  this.hostModel = hostModel;
+}
+
+Tree.prototype = {
+  constructor: Tree,
+  type: 'tree',
+
+  /**
+   * Travel this subtree (include this node).
+   * Usage:
+   *    node.eachNode(function () { ... }); // preorder
+   *    node.eachNode('preorder', function () { ... }); // preorder
+   *    node.eachNode('postorder', function () { ... }); // postorder
+   *    node.eachNode(
+   *        {order: 'postorder', attr: 'viewChildren'},
+   *        function () { ... }
+   *    ); // postorder
+   *
+   * @param {(Object|string)} options If string, means order.
+   * @param {string=} options.order 'preorder' or 'postorder'
+   * @param {string=} options.attr 'children' or 'viewChildren'
+   * @param {Function} cb
+   * @param {Object}   [context]
+   */
+  eachNode: function (options, cb, context) {
+    this.root.eachNode(options, cb, context);
+  },
+
+  /**
+   * @param {number} dataIndex
+   * @return {module:echarts/data/Tree~TreeNode}
+   */
+  getNodeByDataIndex: function (dataIndex) {
+    var rawIndex = this.data.getRawIndex(dataIndex);
+    return this._nodes[rawIndex];
+  },
+
+  /**
+   * @param {string} name
+   * @return {module:echarts/data/Tree~TreeNode}
+   */
+  getNodeByName: function (name) {
+    return this.root.getNodeByName(name);
+  },
+
+  /**
+   * Update item available by list,
+   * when list has been performed options like 'filterSelf' or 'map'.
+   */
+  update: function () {
+    var data = this.data;
+    var nodes = this._nodes;
+
+    for (var i = 0, len = nodes.length; i < len; i++) {
+      nodes[i].dataIndex = -1;
+    }
+
+    for (var i = 0, len = data.count(); i < len; i++) {
+      nodes[data.getRawIndex(i)].dataIndex = i;
+    }
+  },
+
+  /**
+   * Clear all layouts
+   */
+  clearLayouts: function () {
+    this.data.clearItemLayouts();
+  }
+};
+/**
+ * data node format:
+ * {
+ *     name: ...
+ *     value: ...
+ *     children: [
+ *         {
+ *             name: ...
+ *             value: ...
+ *             children: ...
+ *         },
+ *         ...
+ *     ]
+ * }
+ *
+ * @static
+ * @param {Object} dataRoot Root node.
+ * @param {module:echarts/model/Model} hostModel
+ * @return module:echarts/data/Tree
+ */
+
+Tree.createTree = function (dataRoot, hostModel, beforeLink) {
+  var tree = new Tree(hostModel);
+  var listData = [];
+  var dimMax = 1;
+  buildHierarchy(dataRoot);
+
+  function buildHierarchy(dataNode, parentNode) {
+    var value = dataNode.value;
+    dimMax = Math.max(dimMax, isArray(value) ? value.length : 1);
+    listData.push(dataNode);
+    var node = new TreeNode(dataNode.name, tree);
+    parentNode ? addChild(node, parentNode) : tree.root = node;
+
+    tree._nodes.push(node);
+
+    var children = dataNode.children;
+
+    if (children) {
+      for (var i = 0; i < children.length; i++) {
+        buildHierarchy(children[i], node);
+      }
+    }
+  }
+
+  tree.root.updateDepthAndHeight(0);
+  var dimensionsInfo = createDimensions(listData, {
+    coordDimensions: ['value'],
+    dimensionsCount: dimMax
+  });
+  var list = new List(dimensionsInfo, hostModel);
+  list.initData(listData);
+  beforeLink && beforeLink(list);
+  linkList({
+    mainData: list,
+    struct: tree,
+    structAttr: 'tree'
+  });
+  tree.update();
+  return tree;
+};
+/**
+ * It is needed to consider the mess of 'list', 'hostModel' when creating a TreeNote,
+ * so this function is not ready and not necessary to be public.
+ *
+ * @param {(module:echarts/data/Tree~TreeNode|Object)} child
+ */
+
+
+function addChild(child, node) {
+  var children = node.children;
+
+  if (child.parentNode === node) {
+    return;
+  }
+
+  children.push(child);
+  child.parentNode = node;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+SeriesModel.extend({
+  type: 'series.tree',
+  layoutInfo: null,
+  // can support the position parameters 'left', 'top','right','bottom', 'width',
+  // 'height' in the setOption() with 'merge' mode normal.
+  layoutMode: 'box',
+
+  /**
+   * Init a tree data structure from data in option series
+   * @param  {Object} option  the object used to config echarts view
+   * @return {module:echarts/data/List} storage initial data
+   */
+  getInitialData: function (option) {
+    //create an virtual root
+    var root = {
+      name: option.name,
+      children: option.data
+    };
+    var leaves = option.leaves || {};
+    var leavesModel = new Model(leaves, this, this.ecModel);
+    var tree = Tree.createTree(root, this, beforeLink);
+
+    function beforeLink(nodeData) {
+      nodeData.wrapMethod('getItemModel', function (model, idx) {
+        var node = tree.getNodeByDataIndex(idx);
+
+        if (!node.children.length || !node.isExpand) {
+          model.parentModel = leavesModel;
+        }
+
+        return model;
+      });
+    }
+
+    var treeDepth = 0;
+    tree.eachNode('preorder', function (node) {
+      if (node.depth > treeDepth) {
+        treeDepth = node.depth;
+      }
+    });
+    var expandAndCollapse = option.expandAndCollapse;
+    var expandTreeDepth = expandAndCollapse && option.initialTreeDepth >= 0 ? option.initialTreeDepth : treeDepth;
+    tree.root.eachNode('preorder', function (node) {
+      var item = node.hostTree.data.getRawDataItem(node.dataIndex); // Add item.collapsed != null, because users can collapse node original in the series.data.
+
+      node.isExpand = item && item.collapsed != null ? !item.collapsed : node.depth <= expandTreeDepth;
+    });
+    return tree.data;
+  },
+
+  /**
+   * Make the configuration 'orient' backward compatibly, with 'horizontal = LR', 'vertical = TB'.
+   * @returns {string} orient
+   */
+  getOrient: function () {
+    var orient = this.get('orient');
+
+    if (orient === 'horizontal') {
+      orient = 'LR';
+    } else if (orient === 'vertical') {
+      orient = 'TB';
+    }
+
+    return orient;
+  },
+  setZoom: function (zoom) {
+    this.option.zoom = zoom;
+  },
+  setCenter: function (center) {
+    this.option.center = center;
+  },
+
+  /**
+   * @override
+   * @param {number} dataIndex
+   */
+  formatTooltip: function (dataIndex) {
+    var tree = this.getData().tree;
+    var realRoot = tree.root.children[0];
+    var node = tree.getNodeByDataIndex(dataIndex);
+    var value = node.getValue();
+    var name = node.name;
+
+    while (node && node !== realRoot) {
+      name = node.parentNode.name + '.' + name;
+      node = node.parentNode;
+    }
+
+    return encodeHTML(name + (isNaN(value) || value == null ? '' : ' : ' + value));
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 2,
+    coordinateSystem: 'view',
+    // the position of the whole view
+    left: '12%',
+    top: '12%',
+    right: '12%',
+    bottom: '12%',
+    // the layout of the tree, two value can be selected, 'orthogonal' or 'radial'
+    layout: 'orthogonal',
+    // value can be 'polyline'
+    edgeShape: 'curve',
+    edgeForkPosition: '50%',
+    // true | false | 'move' | 'scale', see module:component/helper/RoamController.
+    roam: false,
+    // Symbol size scale ratio in roam
+    nodeScaleRatio: 0.4,
+    // Default on center of graph
+    center: null,
+    zoom: 1,
+    // The orient of orthoginal layout, can be setted to 'LR', 'TB', 'RL', 'BT'.
+    // and the backward compatibility configuration 'horizontal = LR', 'vertical = TB'.
+    orient: 'LR',
+    symbol: 'emptyCircle',
+    symbolSize: 7,
+    expandAndCollapse: true,
+    initialTreeDepth: 2,
+    lineStyle: {
+      color: '#ccc',
+      width: 1.5,
+      curveness: 0.5
+    },
+    itemStyle: {
+      color: 'lightsteelblue',
+      borderColor: '#c23531',
+      borderWidth: 1.5
+    },
+    label: {
+      show: true,
+      color: '#555'
+    },
+    leaves: {
+      label: {
+        show: true
+      }
+    },
+    animationEasing: 'linear',
+    animationDuration: 700,
+    animationDurationUpdate: 1000
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* A third-party license is embeded for some of the code in this file:
+* The tree layoutHelper implementation was originally copied from
+* "d3.js"(https://github.com/d3/d3-hierarchy) with
+* some modifications made for this project.
+* (see more details in the comment of the specific method below.)
+* The use of the source code of this file is also subject to the terms
+* and consitions of the licence of "d3.js" (BSD-3Clause, see
+* </licenses/LICENSE-d3>).
+*/
+
+/**
+ * @file The layout algorithm of node-link tree diagrams. Here we using Reingold-Tilford algorithm to drawing
+ *       the tree.
+ */
+/**
+ * Initialize all computational message for following algorithm.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} root   The virtual root of the tree.
+ */
+
+function init$2(root) {
+  root.hierNode = {
+    defaultAncestor: null,
+    ancestor: root,
+    prelim: 0,
+    modifier: 0,
+    change: 0,
+    shift: 0,
+    i: 0,
+    thread: null
+  };
+  var nodes = [root];
+  var node;
+  var children;
+
+  while (node = nodes.pop()) {
+    // jshint ignore:line
+    children = node.children;
+
+    if (node.isExpand && children.length) {
+      var n = children.length;
+
+      for (var i = n - 1; i >= 0; i--) {
+        var child = children[i];
+        child.hierNode = {
+          defaultAncestor: null,
+          ancestor: child,
+          prelim: 0,
+          modifier: 0,
+          change: 0,
+          shift: 0,
+          i: i,
+          thread: null
+        };
+        nodes.push(child);
+      }
+    }
+  }
+}
+/**
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * Computes a preliminary x coordinate for node. Before that, this function is
+ * applied recursively to the children of node, as well as the function
+ * apportion(). After spacing out the children by calling executeShifts(), the
+ * node is placed to the midpoint of its outermost children.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ * @param {Function} separation
+ */
+
+function firstWalk(node, separation) {
+  var children = node.isExpand ? node.children : [];
+  var siblings = node.parentNode.children;
+  var subtreeW = node.hierNode.i ? siblings[node.hierNode.i - 1] : null;
+
+  if (children.length) {
+    executeShifts(node);
+    var midPoint = (children[0].hierNode.prelim + children[children.length - 1].hierNode.prelim) / 2;
+
+    if (subtreeW) {
+      node.hierNode.prelim = subtreeW.hierNode.prelim + separation(node, subtreeW);
+      node.hierNode.modifier = node.hierNode.prelim - midPoint;
+    } else {
+      node.hierNode.prelim = midPoint;
+    }
+  } else if (subtreeW) {
+    node.hierNode.prelim = subtreeW.hierNode.prelim + separation(node, subtreeW);
+  }
+
+  node.parentNode.hierNode.defaultAncestor = apportion(node, subtreeW, node.parentNode.hierNode.defaultAncestor || siblings[0], separation);
+}
+/**
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * Computes all real x-coordinates by summing up the modifiers recursively.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ */
+
+function secondWalk(node) {
+  var nodeX = node.hierNode.prelim + node.parentNode.hierNode.modifier;
+  node.setLayout({
+    x: nodeX
+  }, true);
+  node.hierNode.modifier += node.parentNode.hierNode.modifier;
+}
+function separation(cb) {
+  return arguments.length ? cb : defaultSeparation;
+}
+/**
+ * Transform the common coordinate to radial coordinate.
+ *
+ * @param  {number} x
+ * @param  {number} y
+ * @return {Object}
+ */
+
+function radialCoordinate(x, y) {
+  var radialCoor = {};
+  x -= Math.PI / 2;
+  radialCoor.x = y * Math.cos(x);
+  radialCoor.y = y * Math.sin(x);
+  return radialCoor;
+}
+/**
+ * Get the layout position of the whole view.
+ *
+ * @param {module:echarts/model/Series} seriesModel  the model object of sankey series
+ * @param {module:echarts/ExtensionAPI} api  provide the API list that the developer can call
+ * @return {module:zrender/core/BoundingRect}  size of rect to draw the sankey view
+ */
+
+function getViewRect$1(seriesModel, api) {
+  return getLayoutRect(seriesModel.getBoxLayoutParams(), {
+    width: api.getWidth(),
+    height: api.getHeight()
+  });
+}
+/**
+ * All other shifts, applied to the smaller subtrees between w- and w+, are
+ * performed by this function.
+ *
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ */
+
+function executeShifts(node) {
+  var children = node.children;
+  var n = children.length;
+  var shift = 0;
+  var change = 0;
+
+  while (--n >= 0) {
+    var child = children[n];
+    child.hierNode.prelim += shift;
+    child.hierNode.modifier += shift;
+    change += child.hierNode.change;
+    shift += child.hierNode.shift + change;
+  }
+}
+/**
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * The core of the algorithm. Here, a new subtree is combined with the
+ * previous subtrees. Threads are used to traverse the inside and outside
+ * contours of the left and right subtree up to the highest common level.
+ * Whenever two nodes of the inside contours conflict, we compute the left
+ * one of the greatest uncommon ancestors using the function nextAncestor()
+ * and call moveSubtree() to shift the subtree and prepare the shifts of
+ * smaller subtrees. Finally, we add a new thread (if necessary).
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} subtreeV
+ * @param  {module:echarts/data/Tree~TreeNode} subtreeW
+ * @param  {module:echarts/data/Tree~TreeNode} ancestor
+ * @param  {Function} separation
+ * @return {module:echarts/data/Tree~TreeNode}
+ */
+
+
+function apportion(subtreeV, subtreeW, ancestor, separation) {
+  if (subtreeW) {
+    var nodeOutRight = subtreeV;
+    var nodeInRight = subtreeV;
+    var nodeOutLeft = nodeInRight.parentNode.children[0];
+    var nodeInLeft = subtreeW;
+    var sumOutRight = nodeOutRight.hierNode.modifier;
+    var sumInRight = nodeInRight.hierNode.modifier;
+    var sumOutLeft = nodeOutLeft.hierNode.modifier;
+    var sumInLeft = nodeInLeft.hierNode.modifier;
+
+    while (nodeInLeft = nextRight(nodeInLeft), nodeInRight = nextLeft(nodeInRight), nodeInLeft && nodeInRight) {
+      nodeOutRight = nextRight(nodeOutRight);
+      nodeOutLeft = nextLeft(nodeOutLeft);
+      nodeOutRight.hierNode.ancestor = subtreeV;
+      var shift = nodeInLeft.hierNode.prelim + sumInLeft - nodeInRight.hierNode.prelim - sumInRight + separation(nodeInLeft, nodeInRight);
+
+      if (shift > 0) {
+        moveSubtree(nextAncestor(nodeInLeft, subtreeV, ancestor), subtreeV, shift);
+        sumInRight += shift;
+        sumOutRight += shift;
+      }
+
+      sumInLeft += nodeInLeft.hierNode.modifier;
+      sumInRight += nodeInRight.hierNode.modifier;
+      sumOutRight += nodeOutRight.hierNode.modifier;
+      sumOutLeft += nodeOutLeft.hierNode.modifier;
+    }
+
+    if (nodeInLeft && !nextRight(nodeOutRight)) {
+      nodeOutRight.hierNode.thread = nodeInLeft;
+      nodeOutRight.hierNode.modifier += sumInLeft - sumOutRight;
+    }
+
+    if (nodeInRight && !nextLeft(nodeOutLeft)) {
+      nodeOutLeft.hierNode.thread = nodeInRight;
+      nodeOutLeft.hierNode.modifier += sumInRight - sumOutLeft;
+      ancestor = subtreeV;
+    }
+  }
+
+  return ancestor;
+}
+/**
+ * This function is used to traverse the right contour of a subtree.
+ * It returns the rightmost child of node or the thread of node. The function
+ * returns null if and only if node is on the highest depth of its subtree.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ * @return {module:echarts/data/Tree~TreeNode}
+ */
+
+
+function nextRight(node) {
+  var children = node.children;
+  return children.length && node.isExpand ? children[children.length - 1] : node.hierNode.thread;
+}
+/**
+ * This function is used to traverse the left contour of a subtree (or a subforest).
+ * It returns the leftmost child of node or the thread of node. The function
+ * returns null if and only if node is on the highest depth of its subtree.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ * @return {module:echarts/data/Tree~TreeNode}
+ */
+
+
+function nextLeft(node) {
+  var children = node.children;
+  return children.length && node.isExpand ? children[0] : node.hierNode.thread;
+}
+/**
+ * If nodeInLeft’s ancestor is a sibling of node, returns nodeInLeft’s ancestor.
+ * Otherwise, returns the specified ancestor.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} nodeInLeft
+ * @param  {module:echarts/data/Tree~TreeNode} node
+ * @param  {module:echarts/data/Tree~TreeNode} ancestor
+ * @return {module:echarts/data/Tree~TreeNode}
+ */
+
+
+function nextAncestor(nodeInLeft, node, ancestor) {
+  return nodeInLeft.hierNode.ancestor.parentNode === node.parentNode ? nodeInLeft.hierNode.ancestor : ancestor;
+}
+/**
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * Shifts the current subtree rooted at wr.
+ * This is done by increasing prelim(w+) and modifier(w+) by shift.
+ *
+ * @param  {module:echarts/data/Tree~TreeNode} wl
+ * @param  {module:echarts/data/Tree~TreeNode} wr
+ * @param  {number} shift [description]
+ */
+
+
+function moveSubtree(wl, wr, shift) {
+  var change = shift / (wr.hierNode.i - wl.hierNode.i);
+  wr.hierNode.change -= change;
+  wr.hierNode.shift += shift;
+  wr.hierNode.modifier += shift;
+  wr.hierNode.prelim += shift;
+  wl.hierNode.change += change;
+}
+/**
+ * The implementation of this function was originally copied from "d3.js"
+ * <https://github.com/d3/d3-hierarchy/blob/4c1f038f2725d6eae2e49b61d01456400694bac4/src/tree.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ */
+
+
+function defaultSeparation(node1, node2) {
+  return node1.parentNode === node2.parentNode ? 1 : 2;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Simple view coordinate system
+ * Mapping given x, y to transformd view x, y
+ */
+var v2ApplyTransform$1 = applyTransform; // Dummy transform node
+
+function TransformDummy() {
+  Transformable.call(this);
+}
+
+mixin(TransformDummy, Transformable);
+
+function View(name) {
+  /**
+   * @type {string}
+   */
+  this.name = name;
+  /**
+   * @type {Object}
+   */
+
+  this.zoomLimit;
+  Transformable.call(this);
+  this._roamTransformable = new TransformDummy();
+  this._rawTransformable = new TransformDummy();
+  this._center;
+  this._zoom;
+}
+
+View.prototype = {
+  constructor: View,
+  type: 'view',
+
+  /**
+   * @param {Array.<string>}
+   * @readOnly
+   */
+  dimensions: ['x', 'y'],
+
+  /**
+   * Set bounding rect
+   * @param {number} x
+   * @param {number} y
+   * @param {number} width
+   * @param {number} height
+   */
+  // PENDING to getRect
+  setBoundingRect: function (x, y, width, height) {
+    this._rect = new BoundingRect(x, y, width, height);
+    return this._rect;
+  },
+
+  /**
+   * @return {module:zrender/core/BoundingRect}
+   */
+  // PENDING to getRect
+  getBoundingRect: function () {
+    return this._rect;
+  },
+
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {number} width
+   * @param {number} height
+   */
+  setViewRect: function (x, y, width, height) {
+    this.transformTo(x, y, width, height);
+    this._viewRect = new BoundingRect(x, y, width, height);
+  },
+
+  /**
+   * Transformed to particular position and size
+   * @param {number} x
+   * @param {number} y
+   * @param {number} width
+   * @param {number} height
+   */
+  transformTo: function (x, y, width, height) {
+    var rect = this.getBoundingRect();
+    var rawTransform = this._rawTransformable;
+    rawTransform.transform = rect.calculateTransform(new BoundingRect(x, y, width, height));
+    rawTransform.decomposeTransform();
+
+    this._updateTransform();
+  },
+
+  /**
+   * Set center of view
+   * @param {Array.<number>} [centerCoord]
+   */
+  setCenter: function (centerCoord) {
+    if (!centerCoord) {
+      return;
+    }
+
+    this._center = centerCoord;
+
+    this._updateCenterAndZoom();
+  },
+
+  /**
+   * @param {number} zoom
+   */
+  setZoom: function (zoom) {
+    zoom = zoom || 1;
+    var zoomLimit = this.zoomLimit;
+
+    if (zoomLimit) {
+      if (zoomLimit.max != null) {
+        zoom = Math.min(zoomLimit.max, zoom);
+      }
+
+      if (zoomLimit.min != null) {
+        zoom = Math.max(zoomLimit.min, zoom);
+      }
+    }
+
+    this._zoom = zoom;
+
+    this._updateCenterAndZoom();
+  },
+
+  /**
+   * Get default center without roam
+   */
+  getDefaultCenter: function () {
+    // Rect before any transform
+    var rawRect = this.getBoundingRect();
+    var cx = rawRect.x + rawRect.width / 2;
+    var cy = rawRect.y + rawRect.height / 2;
+    return [cx, cy];
+  },
+  getCenter: function () {
+    return this._center || this.getDefaultCenter();
+  },
+  getZoom: function () {
+    return this._zoom || 1;
+  },
+
+  /**
+   * @return {Array.<number}
+   */
+  getRoamTransform: function () {
+    return this._roamTransformable.getLocalTransform();
+  },
+
+  /**
+   * Remove roam
+   */
+  _updateCenterAndZoom: function () {
+    // Must update after view transform updated
+    var rawTransformMatrix = this._rawTransformable.getLocalTransform();
+
+    var roamTransform = this._roamTransformable;
+    var defaultCenter = this.getDefaultCenter();
+    var center = this.getCenter();
+    var zoom = this.getZoom();
+    center = applyTransform([], center, rawTransformMatrix);
+    defaultCenter = applyTransform([], defaultCenter, rawTransformMatrix);
+    roamTransform.origin = center;
+    roamTransform.position = [defaultCenter[0] - center[0], defaultCenter[1] - center[1]];
+    roamTransform.scale = [zoom, zoom];
+
+    this._updateTransform();
+  },
+
+  /**
+   * Update transform from roam and mapLocation
+   * @private
+   */
+  _updateTransform: function () {
+    var roamTransformable = this._roamTransformable;
+    var rawTransformable = this._rawTransformable;
+    rawTransformable.parent = roamTransformable;
+    roamTransformable.updateTransform();
+    rawTransformable.updateTransform();
+    copy$1(this.transform || (this.transform = []), rawTransformable.transform || create$1());
+    this._rawTransform = rawTransformable.getLocalTransform();
+    this.invTransform = this.invTransform || [];
+    invert(this.invTransform, this.transform);
+    this.decomposeTransform();
+  },
+  getTransformInfo: function () {
+    var roamTransform = this._roamTransformable.transform;
+    var rawTransformable = this._rawTransformable;
+    return {
+      roamTransform: roamTransform ? slice(roamTransform) : create$1(),
+      rawScale: slice(rawTransformable.scale),
+      rawPosition: slice(rawTransformable.position)
+    };
+  },
+
+  /**
+   * @return {module:zrender/core/BoundingRect}
+   */
+  getViewRect: function () {
+    return this._viewRect;
+  },
+
+  /**
+   * Get view rect after roam transform
+   * @return {module:zrender/core/BoundingRect}
+   */
+  getViewRectAfterRoam: function () {
+    var rect = this.getBoundingRect().clone();
+    rect.applyTransform(this.transform);
+    return rect;
+  },
+
+  /**
+   * Convert a single (lon, lat) data item to (x, y) point.
+   * @param {Array.<number>} data
+   * @param {boolean} noRoam
+   * @param {Array.<number>} [out]
+   * @return {Array.<number>}
+   */
+  dataToPoint: function (data, noRoam, out) {
+    var transform = noRoam ? this._rawTransform : this.transform;
+    out = out || [];
+    return transform ? v2ApplyTransform$1(out, data, transform) : copy(out, data);
+  },
+
+  /**
+   * Convert a (x, y) point to (lon, lat) data
+   * @param {Array.<number>} point
+   * @return {Array.<number>}
+   */
+  pointToData: function (point) {
+    var invTransform = this.invTransform;
+    return invTransform ? v2ApplyTransform$1([], point, invTransform) : [point[0], point[1]];
+  },
+
+  /**
+   * @implements
+   * see {module:echarts/CoodinateSystem}
+   */
+  convertToPixel: curry(doConvert, 'dataToPoint'),
+
+  /**
+   * @implements
+   * see {module:echarts/CoodinateSystem}
+   */
+  convertFromPixel: curry(doConvert, 'pointToData'),
+
+  /**
+   * @implements
+   * see {module:echarts/CoodinateSystem}
+   */
+  containPoint: function (point) {
+    return this.getViewRectAfterRoam().contain(point[0], point[1]);
+  }
+  /**
+   * @return {number}
+   */
+  // getScalarScale: function () {
+  //     // Use determinant square root of transform to mutiply scalar
+  //     var m = this.transform;
+  //     var det = Math.sqrt(Math.abs(m[0] * m[3] - m[2] * m[1]));
+  //     return det;
+  // }
+
+};
+mixin(View, Transformable);
+
+function doConvert(methodName, ecModel, finder, value) {
+  var seriesModel = finder.seriesModel;
+  var coordSys = seriesModel ? seriesModel.coordinateSystem : null; // e.g., graph.
+
+  return coordSys === this ? coordSys[methodName](value) : null;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * For geo and graph.
+ *
+ * @param {Object} controllerHost
+ * @param {module:zrender/Element} controllerHost.target
+ */
+function updateViewOnPan(controllerHost, dx, dy) {
+  var target = controllerHost.target;
+  var pos = target.position;
+  pos[0] += dx;
+  pos[1] += dy;
+  target.dirty();
+}
+/**
+ * For geo and graph.
+ *
+ * @param {Object} controllerHost
+ * @param {module:zrender/Element} controllerHost.target
+ * @param {number} controllerHost.zoom
+ * @param {number} controllerHost.zoomLimit like: {min: 1, max: 2}
+ */
+
+function updateViewOnZoom(controllerHost, zoomDelta, zoomX, zoomY) {
+  var target = controllerHost.target;
+  var zoomLimit = controllerHost.zoomLimit;
+  var pos = target.position;
+  var scale = target.scale;
+  var newZoom = controllerHost.zoom = controllerHost.zoom || 1;
+  newZoom *= zoomDelta;
+
+  if (zoomLimit) {
+    var zoomMin = zoomLimit.min || 0;
+    var zoomMax = zoomLimit.max || Infinity;
+    newZoom = Math.max(Math.min(zoomMax, newZoom), zoomMin);
+  }
+
+  var zoomScale = newZoom / controllerHost.zoom;
+  controllerHost.zoom = newZoom; // Keep the mouse center when scaling
+
+  pos[0] -= (zoomX - pos[0]) * (zoomScale - 1);
+  pos[1] -= (zoomY - pos[1]) * (zoomScale - 1);
+  scale[0] *= zoomScale;
+  scale[1] *= zoomScale;
+  target.dirty();
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var ATTR = '\0_ec_interaction_mutex';
+
+
+function isTaken(zr, resourceKey) {
+  return !!getStore(zr)[resourceKey];
+}
+
+function getStore(zr) {
+  return zr[ATTR] || (zr[ATTR] = {});
+}
+/**
+ * payload: {
+ *     type: 'takeGlobalCursor',
+ *     key: 'dataZoomSelect', or 'brush', or ...,
+ *         If no userKey, release global cursor.
+ * }
+ */
+
+
+registerAction({
+  type: 'takeGlobalCursor',
+  event: 'globalCursorTaken',
+  update: 'update'
+}, function () {});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @alias module:echarts/component/helper/RoamController
+ * @constructor
+ * @mixin {module:zrender/mixin/Eventful}
+ *
+ * @param {module:zrender/zrender~ZRender} zr
+ */
+
+function RoamController(zr) {
+  /**
+   * @type {Function}
+   */
+  this.pointerChecker;
+  /**
+   * @type {module:zrender}
+   */
+
+  this._zr = zr;
+  /**
+   * @type {Object}
+   */
+
+  this._opt = {}; // Avoid two roamController bind the same handler
+
+  var bind$$1 = bind;
+  var mousedownHandler = bind$$1(mousedown, this);
+  var mousemoveHandler = bind$$1(mousemove, this);
+  var mouseupHandler = bind$$1(mouseup, this);
+  var mousewheelHandler = bind$$1(mousewheel, this);
+  var pinchHandler = bind$$1(pinch, this);
+  Eventful.call(this);
+  /**
+   * @param {Function} pointerChecker
+   *                   input: x, y
+   *                   output: boolean
+   */
+
+  this.setPointerChecker = function (pointerChecker) {
+    this.pointerChecker = pointerChecker;
+  };
+  /**
+   * Notice: only enable needed types. For example, if 'zoom'
+   * is not needed, 'zoom' should not be enabled, otherwise
+   * default mousewheel behaviour (scroll page) will be disabled.
+   *
+   * @param  {boolean|string} [controlType=true] Specify the control type,
+   *                          which can be null/undefined or true/false
+   *                          or 'pan/move' or 'zoom'/'scale'
+   * @param {Object} [opt]
+   * @param {Object} [opt.zoomOnMouseWheel=true] The value can be: true / false / 'shift' / 'ctrl' / 'alt'.
+   * @param {Object} [opt.moveOnMouseMove=true] The value can be: true / false / 'shift' / 'ctrl' / 'alt'.
+   * @param {Object} [opt.moveOnMouseWheel=false] The value can be: true / false / 'shift' / 'ctrl' / 'alt'.
+   * @param {Object} [opt.preventDefaultMouseMove=true] When pan.
+   */
+
+
+  this.enable = function (controlType, opt) {
+    // Disable previous first
+    this.disable();
+    this._opt = defaults(clone(opt) || {}, {
+      zoomOnMouseWheel: true,
+      moveOnMouseMove: true,
+      // By default, wheel do not trigger move.
+      moveOnMouseWheel: false,
+      preventDefaultMouseMove: true
+    });
+
+    if (controlType == null) {
+      controlType = true;
+    }
+
+    if (controlType === true || controlType === 'move' || controlType === 'pan') {
+      zr.on('mousedown', mousedownHandler);
+      zr.on('mousemove', mousemoveHandler);
+      zr.on('mouseup', mouseupHandler);
+    }
+
+    if (controlType === true || controlType === 'scale' || controlType === 'zoom') {
+      zr.on('mousewheel', mousewheelHandler);
+      zr.on('pinch', pinchHandler);
+    }
+  };
+
+  this.disable = function () {
+    zr.off('mousedown', mousedownHandler);
+    zr.off('mousemove', mousemoveHandler);
+    zr.off('mouseup', mouseupHandler);
+    zr.off('mousewheel', mousewheelHandler);
+    zr.off('pinch', pinchHandler);
+  };
+
+  this.dispose = this.disable;
+
+  this.isDragging = function () {
+    return this._dragging;
+  };
+
+  this.isPinching = function () {
+    return this._pinching;
+  };
+}
+
+mixin(RoamController, Eventful);
+
+function mousedown(e) {
+  if (isMiddleOrRightButtonOnMouseUpDown(e) || e.target && e.target.draggable) {
+    return;
+  }
+
+  var x = e.offsetX;
+  var y = e.offsetY; // Only check on mosedown, but not mousemove.
+  // Mouse can be out of target when mouse moving.
+
+  if (this.pointerChecker && this.pointerChecker(e, x, y)) {
+    this._x = x;
+    this._y = y;
+    this._dragging = true;
+  }
+}
+
+function mousemove(e) {
+  if (!this._dragging || !isAvailableBehavior('moveOnMouseMove', e, this._opt) || e.gestureEvent === 'pinch' || isTaken(this._zr, 'globalPan')) {
+    return;
+  }
+
+  var x = e.offsetX;
+  var y = e.offsetY;
+  var oldX = this._x;
+  var oldY = this._y;
+  var dx = x - oldX;
+  var dy = y - oldY;
+  this._x = x;
+  this._y = y;
+  this._opt.preventDefaultMouseMove && stop(e.event);
+  trigger(this, 'pan', 'moveOnMouseMove', e, {
+    dx: dx,
+    dy: dy,
+    oldX: oldX,
+    oldY: oldY,
+    newX: x,
+    newY: y
+  });
+}
+
+function mouseup(e) {
+  if (!isMiddleOrRightButtonOnMouseUpDown(e)) {
+    this._dragging = false;
+  }
+}
+
+function mousewheel(e) {
+  var shouldZoom = isAvailableBehavior('zoomOnMouseWheel', e, this._opt);
+  var shouldMove = isAvailableBehavior('moveOnMouseWheel', e, this._opt);
+  var wheelDelta = e.wheelDelta;
+  var absWheelDeltaDelta = Math.abs(wheelDelta);
+  var originX = e.offsetX;
+  var originY = e.offsetY; // wheelDelta maybe -0 in chrome mac.
+
+  if (wheelDelta === 0 || !shouldZoom && !shouldMove) {
+    return;
+  } // If both `shouldZoom` and `shouldMove` is true, trigger
+  // their event both, and the final behavior is determined
+  // by event listener themselves.
+
+
+  if (shouldZoom) {
+    // Convenience:
+    // Mac and VM Windows on Mac: scroll up: zoom out.
+    // Windows: scroll up: zoom in.
+    // FIXME: Should do more test in different environment.
+    // wheelDelta is too complicated in difference nvironment
+    // (https://developer.mozilla.org/en-US/docs/Web/Events/mousewheel),
+    // although it has been normallized by zrender.
+    // wheelDelta of mouse wheel is bigger than touch pad.
+    var factor = absWheelDeltaDelta > 3 ? 1.4 : absWheelDeltaDelta > 1 ? 1.2 : 1.1;
+    var scale = wheelDelta > 0 ? factor : 1 / factor;
+    checkPointerAndTrigger(this, 'zoom', 'zoomOnMouseWheel', e, {
+      scale: scale,
+      originX: originX,
+      originY: originY
+    });
+  }
+
+  if (shouldMove) {
+    // FIXME: Should do more test in different environment.
+    var absDelta = Math.abs(wheelDelta); // wheelDelta of mouse wheel is bigger than touch pad.
+
+    var scrollDelta = (wheelDelta > 0 ? 1 : -1) * (absDelta > 3 ? 0.4 : absDelta > 1 ? 0.15 : 0.05);
+    checkPointerAndTrigger(this, 'scrollMove', 'moveOnMouseWheel', e, {
+      scrollDelta: scrollDelta,
+      originX: originX,
+      originY: originY
+    });
+  }
+}
+
+function pinch(e) {
+  if (isTaken(this._zr, 'globalPan')) {
+    return;
+  }
+
+  var scale = e.pinchScale > 1 ? 1.1 : 1 / 1.1;
+  checkPointerAndTrigger(this, 'zoom', null, e, {
+    scale: scale,
+    originX: e.pinchX,
+    originY: e.pinchY
+  });
+}
+
+function checkPointerAndTrigger(controller, eventName, behaviorToCheck, e, contollerEvent) {
+  if (controller.pointerChecker && controller.pointerChecker(e, contollerEvent.originX, contollerEvent.originY)) {
+    // When mouse is out of roamController rect,
+    // default befavoius should not be be disabled, otherwise
+    // page sliding is disabled, contrary to expectation.
+    stop(e.event);
+    trigger(controller, eventName, behaviorToCheck, e, contollerEvent);
+  }
+}
+
+function trigger(controller, eventName, behaviorToCheck, e, contollerEvent) {
+  // Also provide behavior checker for event listener, for some case that
+  // multiple components share one listener.
+  contollerEvent.isAvailableBehavior = bind(isAvailableBehavior, null, behaviorToCheck, e);
+  controller.trigger(eventName, contollerEvent);
+} // settings: {
+//     zoomOnMouseWheel
+//     moveOnMouseMove
+//     moveOnMouseWheel
+// }
+// The value can be: true / false / 'shift' / 'ctrl' / 'alt'.
+
+
+function isAvailableBehavior(behaviorToCheck, e, settings) {
+  var setting = settings[behaviorToCheck];
+  return !behaviorToCheck || setting && (!isString(setting) || e.event[setting + 'Key']);
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var IRRELEVANT_EXCLUDES = {
+  'axisPointer': 1,
+  'tooltip': 1,
+  'brush': 1
+};
+/**
+ * Avoid that: mouse click on a elements that is over geo or graph,
+ * but roam is triggered.
+ */
+
+function onIrrelevantElement(e, api, targetCoordSysModel) {
+  var model = api.getComponentByElement(e.topTarget); // If model is axisModel, it works only if it is injected with coordinateSystem.
+
+  var coordSys = model && model.coordinateSystem;
+  return model && model !== targetCoordSysModel && !IRRELEVANT_EXCLUDES[model.mainType] && coordSys && coordSys.model !== targetCoordSysModel;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var TreeShape = extendShape({
+  shape: {
+    parentPoint: [],
+    childPoints: [],
+    orient: '',
+    forkPosition: ''
+  },
+  style: {
+    stroke: '#000',
+    fill: null
+  },
+  buildPath: function (ctx, shape) {
+    var childPoints = shape.childPoints;
+    var childLen = childPoints.length;
+    var parentPoint = shape.parentPoint;
+    var firstChildPos = childPoints[0];
+    var lastChildPos = childPoints[childLen - 1];
+
+    if (childLen === 1) {
+      ctx.moveTo(parentPoint[0], parentPoint[1]);
+      ctx.lineTo(firstChildPos[0], firstChildPos[1]);
+      return;
+    }
+
+    var orient = shape.orient;
+    var forkDim = orient === 'TB' || orient === 'BT' ? 0 : 1;
+    var otherDim = 1 - forkDim;
+    var forkPosition = parsePercent$1(shape.forkPosition, 1);
+    var tmpPoint = [];
+    tmpPoint[forkDim] = parentPoint[forkDim];
+    tmpPoint[otherDim] = parentPoint[otherDim] + (lastChildPos[otherDim] - parentPoint[otherDim]) * forkPosition;
+    ctx.moveTo(parentPoint[0], parentPoint[1]);
+    ctx.lineTo(tmpPoint[0], tmpPoint[1]);
+    ctx.moveTo(firstChildPos[0], firstChildPos[1]);
+    tmpPoint[forkDim] = firstChildPos[forkDim];
+    ctx.lineTo(tmpPoint[0], tmpPoint[1]);
+    tmpPoint[forkDim] = lastChildPos[forkDim];
+    ctx.lineTo(tmpPoint[0], tmpPoint[1]);
+    ctx.lineTo(lastChildPos[0], lastChildPos[1]);
+
+    for (var i = 1; i < childLen - 1; i++) {
+      var point = childPoints[i];
+      ctx.moveTo(point[0], point[1]);
+      tmpPoint[forkDim] = point[forkDim];
+      ctx.lineTo(tmpPoint[0], tmpPoint[1]);
+    }
+  }
+});
+extendChartView({
+  type: 'tree',
+
+  /**
+   * Init the chart
+   * @override
+   * @param  {module:echarts/model/Global} ecModel
+   * @param  {module:echarts/ExtensionAPI} api
+   */
+  init: function (ecModel, api) {
+    /**
+     * @private
+     * @type {module:echarts/data/Tree}
+     */
+    this._oldTree;
+    /**
+     * @private
+     * @type {module:zrender/container/Group}
+     */
+
+    this._mainGroup = new Group();
+    /**
+     * @private
+     * @type {module:echarts/componet/helper/RoamController}
+     */
+
+    this._controller = new RoamController(api.getZr());
+    this._controllerHost = {
+      target: this.group
+    };
+    this.group.add(this._mainGroup);
+  },
+  render: function (seriesModel, ecModel, api, payload) {
+    var data = seriesModel.getData();
+    var layoutInfo = seriesModel.layoutInfo;
+    var group = this._mainGroup;
+    var layout = seriesModel.get('layout');
+
+    if (layout === 'radial') {
+      group.attr('position', [layoutInfo.x + layoutInfo.width / 2, layoutInfo.y + layoutInfo.height / 2]);
+    } else {
+      group.attr('position', [layoutInfo.x, layoutInfo.y]);
+    }
+
+    this._updateViewCoordSys(seriesModel, layoutInfo, layout);
+
+    this._updateController(seriesModel, ecModel, api);
+
+    var oldData = this._data;
+    var seriesScope = {
+      expandAndCollapse: seriesModel.get('expandAndCollapse'),
+      layout: layout,
+      edgeShape: seriesModel.get('edgeShape'),
+      edgeForkPosition: seriesModel.get('edgeForkPosition'),
+      orient: seriesModel.getOrient(),
+      curvature: seriesModel.get('lineStyle.curveness'),
+      symbolRotate: seriesModel.get('symbolRotate'),
+      symbolOffset: seriesModel.get('symbolOffset'),
+      hoverAnimation: seriesModel.get('hoverAnimation'),
+      useNameLabel: true,
+      fadeIn: true
+    };
+    data.diff(oldData).add(function (newIdx) {
+      if (symbolNeedsDraw$1(data, newIdx)) {
+        // Create node and edge
+        updateNode(data, newIdx, null, group, seriesModel, seriesScope);
+      }
+    }).update(function (newIdx, oldIdx) {
+      var symbolEl = oldData.getItemGraphicEl(oldIdx);
+
+      if (!symbolNeedsDraw$1(data, newIdx)) {
+        symbolEl && removeNode(oldData, oldIdx, symbolEl, group, seriesModel, seriesScope);
+        return;
+      } // Update node and edge
+
+
+      updateNode(data, newIdx, symbolEl, group, seriesModel, seriesScope);
+    }).remove(function (oldIdx) {
+      var symbolEl = oldData.getItemGraphicEl(oldIdx); // When remove a collapsed node of subtree, since the collapsed
+      // node haven't been initialized with a symbol element,
+      // you can't found it's symbol element through index.
+      // so if we want to remove the symbol element we should insure
+      // that the symbol element is not null.
+
+      if (symbolEl) {
+        removeNode(oldData, oldIdx, symbolEl, group, seriesModel, seriesScope);
+      }
+    }).execute();
+    this._nodeScaleRatio = seriesModel.get('nodeScaleRatio');
+
+    this._updateNodeAndLinkScale(seriesModel);
+
+    if (seriesScope.expandAndCollapse === true) {
+      data.eachItemGraphicEl(function (el, dataIndex) {
+        el.off('click').on('click', function () {
+          api.dispatchAction({
+            type: 'treeExpandAndCollapse',
+            seriesId: seriesModel.id,
+            dataIndex: dataIndex
+          });
+        });
+      });
+    }
+
+    this._data = data;
+  },
+  _updateViewCoordSys: function (seriesModel) {
+    var data = seriesModel.getData();
+    var points = [];
+    data.each(function (idx) {
+      var layout = data.getItemLayout(idx);
+
+      if (layout && !isNaN(layout.x) && !isNaN(layout.y)) {
+        points.push([+layout.x, +layout.y]);
+      }
+    });
+    var min = [];
+    var max = [];
+    fromPoints(points, min, max); // If don't Store min max when collapse the root node after roam,
+    // the root node will disappear.
+
+    var oldMin = this._min;
+    var oldMax = this._max; // If width or height is 0
+
+    if (max[0] - min[0] === 0) {
+      min[0] = oldMin ? oldMin[0] : min[0] - 1;
+      max[0] = oldMax ? oldMax[0] : max[0] + 1;
+    }
+
+    if (max[1] - min[1] === 0) {
+      min[1] = oldMin ? oldMin[1] : min[1] - 1;
+      max[1] = oldMax ? oldMax[1] : max[1] + 1;
+    }
+
+    var viewCoordSys = seriesModel.coordinateSystem = new View();
+    viewCoordSys.zoomLimit = seriesModel.get('scaleLimit');
+    viewCoordSys.setBoundingRect(min[0], min[1], max[0] - min[0], max[1] - min[1]);
+    viewCoordSys.setCenter(seriesModel.get('center'));
+    viewCoordSys.setZoom(seriesModel.get('zoom')); // Here we use viewCoordSys just for computing the 'position' and 'scale' of the group
+
+    this.group.attr({
+      position: viewCoordSys.position,
+      scale: viewCoordSys.scale
+    });
+    this._viewCoordSys = viewCoordSys;
+    this._min = min;
+    this._max = max;
+  },
+  _updateController: function (seriesModel, ecModel, api) {
+    var controller = this._controller;
+    var controllerHost = this._controllerHost;
+    var group = this.group;
+    controller.setPointerChecker(function (e, x, y) {
+      var rect = group.getBoundingRect();
+      rect.applyTransform(group.transform);
+      return rect.contain(x, y) && !onIrrelevantElement(e, api, seriesModel);
+    });
+    controller.enable(seriesModel.get('roam'));
+    controllerHost.zoomLimit = seriesModel.get('scaleLimit');
+    controllerHost.zoom = seriesModel.coordinateSystem.getZoom();
+    controller.off('pan').off('zoom').on('pan', function (e) {
+      updateViewOnPan(controllerHost, e.dx, e.dy);
+      api.dispatchAction({
+        seriesId: seriesModel.id,
+        type: 'treeRoam',
+        dx: e.dx,
+        dy: e.dy
+      });
+    }, this).on('zoom', function (e) {
+      updateViewOnZoom(controllerHost, e.scale, e.originX, e.originY);
+      api.dispatchAction({
+        seriesId: seriesModel.id,
+        type: 'treeRoam',
+        zoom: e.scale,
+        originX: e.originX,
+        originY: e.originY
+      });
+
+      this._updateNodeAndLinkScale(seriesModel);
+    }, this);
+  },
+  _updateNodeAndLinkScale: function (seriesModel) {
+    var data = seriesModel.getData();
+
+    var nodeScale = this._getNodeGlobalScale(seriesModel);
+
+    var invScale = [nodeScale, nodeScale];
+    data.eachItemGraphicEl(function (el, idx) {
+      el.attr('scale', invScale);
+    });
+  },
+  _getNodeGlobalScale: function (seriesModel) {
+    var coordSys = seriesModel.coordinateSystem;
+
+    if (coordSys.type !== 'view') {
+      return 1;
+    }
+
+    var nodeScaleRatio = this._nodeScaleRatio;
+    var groupScale = coordSys.scale;
+    var groupZoom = groupScale && groupScale[0] || 1; // Scale node when zoom changes
+
+    var roamZoom = coordSys.getZoom();
+    var nodeScale = (roamZoom - 1) * nodeScaleRatio + 1;
+    return nodeScale / groupZoom;
+  },
+  dispose: function () {
+    this._controller && this._controller.dispose();
+    this._controllerHost = {};
+  },
+  remove: function () {
+    this._mainGroup.removeAll();
+
+    this._data = null;
+  }
+});
+
+function symbolNeedsDraw$1(data, dataIndex) {
+  var layout = data.getItemLayout(dataIndex);
+  return layout && !isNaN(layout.x) && !isNaN(layout.y) && data.getItemVisual(dataIndex, 'symbol') !== 'none';
+}
+
+function getTreeNodeStyle(node, itemModel, seriesScope) {
+  seriesScope.itemModel = itemModel;
+  seriesScope.itemStyle = itemModel.getModel('itemStyle').getItemStyle();
+  seriesScope.hoverItemStyle = itemModel.getModel('emphasis.itemStyle').getItemStyle();
+  seriesScope.lineStyle = itemModel.getModel('lineStyle').getLineStyle();
+  seriesScope.labelModel = itemModel.getModel('label');
+  seriesScope.hoverLabelModel = itemModel.getModel('emphasis.label');
+
+  if (node.isExpand === false && node.children.length !== 0) {
+    seriesScope.symbolInnerColor = seriesScope.itemStyle.fill;
+  } else {
+    seriesScope.symbolInnerColor = '#fff';
+  }
+
+  return seriesScope;
+}
+
+function updateNode(data, dataIndex, symbolEl, group, seriesModel, seriesScope) {
+  var isInit = !symbolEl;
+  var node = data.tree.getNodeByDataIndex(dataIndex);
+  var itemModel = node.getModel();
+  var seriesScope = getTreeNodeStyle(node, itemModel, seriesScope);
+  var virtualRoot = data.tree.root;
+  var source = node.parentNode === virtualRoot ? node : node.parentNode || node;
+  var sourceSymbolEl = data.getItemGraphicEl(source.dataIndex);
+  var sourceLayout = source.getLayout();
+  var sourceOldLayout = sourceSymbolEl ? {
+    x: sourceSymbolEl.position[0],
+    y: sourceSymbolEl.position[1],
+    rawX: sourceSymbolEl.__radialOldRawX,
+    rawY: sourceSymbolEl.__radialOldRawY
+  } : sourceLayout;
+  var targetLayout = node.getLayout();
+
+  if (isInit) {
+    symbolEl = new SymbolClz$1(data, dataIndex, seriesScope);
+    symbolEl.attr('position', [sourceOldLayout.x, sourceOldLayout.y]);
+  } else {
+    symbolEl.updateData(data, dataIndex, seriesScope);
+  }
+
+  symbolEl.__radialOldRawX = symbolEl.__radialRawX;
+  symbolEl.__radialOldRawY = symbolEl.__radialRawY;
+  symbolEl.__radialRawX = targetLayout.rawX;
+  symbolEl.__radialRawY = targetLayout.rawY;
+  group.add(symbolEl);
+  data.setItemGraphicEl(dataIndex, symbolEl);
+  updateProps(symbolEl, {
+    position: [targetLayout.x, targetLayout.y]
+  }, seriesModel);
+  var symbolPath = symbolEl.getSymbolPath();
+
+  if (seriesScope.layout === 'radial') {
+    var realRoot = virtualRoot.children[0];
+    var rootLayout = realRoot.getLayout();
+    var length = realRoot.children.length;
+    var rad;
+    var isLeft;
+
+    if (targetLayout.x === rootLayout.x && node.isExpand === true) {
+      var center = {};
+      center.x = (realRoot.children[0].getLayout().x + realRoot.children[length - 1].getLayout().x) / 2;
+      center.y = (realRoot.children[0].getLayout().y + realRoot.children[length - 1].getLayout().y) / 2;
+      rad = Math.atan2(center.y - rootLayout.y, center.x - rootLayout.x);
+
+      if (rad < 0) {
+        rad = Math.PI * 2 + rad;
+      }
+
+      isLeft = center.x < rootLayout.x;
+
+      if (isLeft) {
+        rad = rad - Math.PI;
+      }
+    } else {
+      rad = Math.atan2(targetLayout.y - rootLayout.y, targetLayout.x - rootLayout.x);
+
+      if (rad < 0) {
+        rad = Math.PI * 2 + rad;
+      }
+
+      if (node.children.length === 0 || node.children.length !== 0 && node.isExpand === false) {
+        isLeft = targetLayout.x < rootLayout.x;
+
+        if (isLeft) {
+          rad = rad - Math.PI;
+        }
+      } else {
+        isLeft = targetLayout.x > rootLayout.x;
+
+        if (!isLeft) {
+          rad = rad - Math.PI;
+        }
+      }
+    }
+
+    var textPosition = isLeft ? 'left' : 'right';
+    var rotate = seriesScope.labelModel.get('rotate');
+    var labelRotateRadian = rotate * (Math.PI / 180);
+    symbolPath.setStyle({
+      textPosition: seriesScope.labelModel.get('position') || textPosition,
+      textRotation: rotate == null ? -rad : labelRotateRadian,
+      textOrigin: 'center',
+      verticalAlign: 'middle'
+    });
+  }
+
+  drawEdge(seriesModel, node, virtualRoot, symbolEl, sourceOldLayout, sourceLayout, targetLayout, group, seriesScope);
+}
+
+function drawEdge(seriesModel, node, virtualRoot, symbolEl, sourceOldLayout, sourceLayout, targetLayout, group, seriesScope) {
+  var edgeShape = seriesScope.edgeShape;
+  var edge = symbolEl.__edge;
+
+  if (edgeShape === 'curve') {
+    if (node.parentNode && node.parentNode !== virtualRoot) {
+      if (!edge) {
+        edge = symbolEl.__edge = new BezierCurve({
+          shape: getEdgeShape(seriesScope, sourceOldLayout, sourceOldLayout),
+          style: defaults({
+            opacity: 0,
+            strokeNoScale: true
+          }, seriesScope.lineStyle)
+        });
+      }
+
+      updateProps(edge, {
+        shape: getEdgeShape(seriesScope, sourceLayout, targetLayout),
+        style: defaults({
+          opacity: 1
+        }, seriesScope.lineStyle)
+      }, seriesModel);
+    }
+  } else if (edgeShape === 'polyline') {
+    if (seriesScope.layout === 'orthogonal') {
+      if (node !== virtualRoot && node.children && node.children.length !== 0 && node.isExpand === true) {
+        var children = node.children;
+        var childPoints = [];
+
+        for (var i = 0; i < children.length; i++) {
+          var childLayout = children[i].getLayout();
+          childPoints.push([childLayout.x, childLayout.y]);
+        }
+
+        if (!edge) {
+          edge = symbolEl.__edge = new TreeShape({
+            shape: {
+              parentPoint: [targetLayout.x, targetLayout.y],
+              childPoints: [[targetLayout.x, targetLayout.y]],
+              orient: seriesScope.orient,
+              forkPosition: seriesScope.edgeForkPosition
+            },
+            style: defaults({
+              opacity: 0,
+              strokeNoScale: true
+            }, seriesScope.lineStyle)
+          });
+        }
+
+        updateProps(edge, {
+          shape: {
+            parentPoint: [targetLayout.x, targetLayout.y],
+            childPoints: childPoints
+          },
+          style: defaults({
+            opacity: 1
+          }, seriesScope.lineStyle)
+        }, seriesModel);
+      }
+    } else {}
+  }
+
+  group.add(edge);
+}
+
+function removeNode(data, dataIndex, symbolEl, group, seriesModel, seriesScope) {
+  var node = data.tree.getNodeByDataIndex(dataIndex);
+  var virtualRoot = data.tree.root;
+  var itemModel = node.getModel();
+  var seriesScope = getTreeNodeStyle(node, itemModel, seriesScope);
+  var source = node.parentNode === virtualRoot ? node : node.parentNode || node;
+  var edgeShape = seriesScope.edgeShape;
+  var sourceLayout;
+
+  while (sourceLayout = source.getLayout(), sourceLayout == null) {
+    source = source.parentNode === virtualRoot ? source : source.parentNode || source;
+  }
+
+  updateProps(symbolEl, {
+    position: [sourceLayout.x + 1, sourceLayout.y + 1]
+  }, seriesModel, function () {
+    group.remove(symbolEl);
+    data.setItemGraphicEl(dataIndex, null);
+  });
+  symbolEl.fadeOut(null, {
+    keepLabel: true
+  });
+  var sourceSymbolEl = data.getItemGraphicEl(source.dataIndex);
+  var sourceEdge = sourceSymbolEl.__edge; // 1. when expand the sub tree, delete the children node should delete the edge of
+  // the source at the same time. because the polyline edge shape is only owned by the source.
+  // 2.when the node is the only children of the source, delete the node should delete the edge of
+  // the source at the same time. the same reason as above.
+
+  var edge = symbolEl.__edge || (source.isExpand === false || source.children.length === 1 ? sourceEdge : undefined);
+  var edgeShape = seriesScope.edgeShape;
+
+  if (edge) {
+    if (edgeShape === 'curve') {
+      updateProps(edge, {
+        shape: getEdgeShape(seriesScope, sourceLayout, sourceLayout),
+        style: {
+          opacity: 0
+        }
+      }, seriesModel, function () {
+        group.remove(edge);
+      });
+    } else if (edgeShape === 'polyline' && seriesScope.layout === 'orthogonal') {
+      updateProps(edge, {
+        shape: {
+          parentPoint: [sourceLayout.x, sourceLayout.y],
+          childPoints: [[sourceLayout.x, sourceLayout.y]]
+        },
+        style: {
+          opacity: 0
+        }
+      }, seriesModel, function () {
+        group.remove(edge);
+      });
+    }
+  }
+}
+
+function getEdgeShape(seriesScope, sourceLayout, targetLayout) {
+  var cpx1;
+  var cpy1;
+  var cpx2;
+  var cpy2;
+  var orient = seriesScope.orient;
+  var x1;
+  var x2;
+  var y1;
+  var y2;
+
+  if (seriesScope.layout === 'radial') {
+    x1 = sourceLayout.rawX;
+    y1 = sourceLayout.rawY;
+    x2 = targetLayout.rawX;
+    y2 = targetLayout.rawY;
+    var radialCoor1 = radialCoordinate(x1, y1);
+    var radialCoor2 = radialCoordinate(x1, y1 + (y2 - y1) * seriesScope.curvature);
+    var radialCoor3 = radialCoordinate(x2, y2 + (y1 - y2) * seriesScope.curvature);
+    var radialCoor4 = radialCoordinate(x2, y2);
+    return {
+      x1: radialCoor1.x,
+      y1: radialCoor1.y,
+      x2: radialCoor4.x,
+      y2: radialCoor4.y,
+      cpx1: radialCoor2.x,
+      cpy1: radialCoor2.y,
+      cpx2: radialCoor3.x,
+      cpy2: radialCoor3.y
+    };
+  } else {
+    x1 = sourceLayout.x;
+    y1 = sourceLayout.y;
+    x2 = targetLayout.x;
+    y2 = targetLayout.y;
+
+    if (orient === 'LR' || orient === 'RL') {
+      cpx1 = x1 + (x2 - x1) * seriesScope.curvature;
+      cpy1 = y1;
+      cpx2 = x2 + (x1 - x2) * seriesScope.curvature;
+      cpy2 = y2;
+    }
+
+    if (orient === 'TB' || orient === 'BT') {
+      cpx1 = x1;
+      cpy1 = y1 + (y2 - y1) * seriesScope.curvature;
+      cpx2 = x2;
+      cpy2 = y2 + (y1 - y2) * seriesScope.curvature;
+    }
+  }
+
+  return {
+    x1: x1,
+    y1: y1,
+    x2: x2,
+    y2: y2,
+    cpx1: cpx1,
+    cpy1: cpy1,
+    cpx2: cpx2,
+    cpy2: cpy2
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @param {module:echarts/coord/View} view
+ * @param {Object} payload
+ * @param {Object} [zoomLimit]
+ */
+function updateCenterAndZoom(view, payload, zoomLimit) {
+  var previousZoom = view.getZoom();
+  var center = view.getCenter();
+  var zoom = payload.zoom;
+  var point = view.dataToPoint(center);
+
+  if (payload.dx != null && payload.dy != null) {
+    point[0] -= payload.dx;
+    point[1] -= payload.dy;
+    var center = view.pointToData(point);
+    view.setCenter(center);
+  }
+
+  if (zoom != null) {
+    if (zoomLimit) {
+      var zoomMin = zoomLimit.min || 0;
+      var zoomMax = zoomLimit.max || Infinity;
+      zoom = Math.max(Math.min(previousZoom * zoom, zoomMax), zoomMin) / previousZoom;
+    } // Zoom on given point(originX, originY)
+
+
+    view.scale[0] *= zoom;
+    view.scale[1] *= zoom;
+    var position = view.position;
+    var fixX = (payload.originX - position[0]) * (zoom - 1);
+    var fixY = (payload.originY - position[1]) * (zoom - 1);
+    position[0] -= fixX;
+    position[1] -= fixY;
+    view.updateTransform(); // Get the new center
+
+    var center = view.pointToData(point);
+    view.setCenter(center);
+    view.setZoom(zoom * previousZoom);
+  }
+
+  return {
+    center: view.getCenter(),
+    zoom: view.getZoom()
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerAction({
+  type: 'treeExpandAndCollapse',
+  event: 'treeExpandAndCollapse',
+  update: 'update'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'tree',
+    query: payload
+  }, function (seriesModel) {
+    var dataIndex = payload.dataIndex;
+    var tree = seriesModel.getData().tree;
+    var node = tree.getNodeByDataIndex(dataIndex);
+    node.isExpand = !node.isExpand;
+  });
+});
+registerAction({
+  type: 'treeRoam',
+  event: 'treeRoam',
+  // Here we set 'none' instead of 'update', because roam action
+  // just need to update the transform matrix without having to recalculate
+  // the layout. So don't need to go through the whole update process, such
+  // as 'dataPrcocess', 'coordSystemUpdate', 'layout' and so on.
+  update: 'none'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'tree',
+    query: payload
+  }, function (seriesModel) {
+    var coordSys = seriesModel.coordinateSystem;
+    var res = updateCenterAndZoom(coordSys, payload);
+    seriesModel.setCenter && seriesModel.setCenter(res.center);
+    seriesModel.setZoom && seriesModel.setZoom(res.zoom);
+  });
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Traverse the tree from bottom to top and do something
+ * @param  {module:echarts/data/Tree~TreeNode} root  The real root of the tree
+ * @param  {Function} callback
+ */
+function eachAfter(root, callback, separation) {
+  var nodes = [root];
+  var next = [];
+  var node;
+
+  while (node = nodes.pop()) {
+    // jshint ignore:line
+    next.push(node);
+
+    if (node.isExpand) {
+      var children = node.children;
+
+      if (children.length) {
+        for (var i = 0; i < children.length; i++) {
+          nodes.push(children[i]);
+        }
+      }
+    }
+  }
+
+  while (node = next.pop()) {
+    // jshint ignore:line
+    callback(node, separation);
+  }
+}
+/**
+ * Traverse the tree from top to bottom and do something
+ * @param  {module:echarts/data/Tree~TreeNode} root  The real root of the tree
+ * @param  {Function} callback
+ */
+
+
+function eachBefore(root, callback) {
+  var nodes = [root];
+  var node;
+
+  while (node = nodes.pop()) {
+    // jshint ignore:line
+    callback(node);
+
+    if (node.isExpand) {
+      var children = node.children;
+
+      if (children.length) {
+        for (var i = children.length - 1; i >= 0; i--) {
+          nodes.push(children[i]);
+        }
+      }
+    }
+  }
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var treeLayout = function (ecModel, api) {
+  ecModel.eachSeriesByType('tree', function (seriesModel) {
+    commonLayout(seriesModel, api);
+  });
+};
+
+function commonLayout(seriesModel, api) {
+  var layoutInfo = getViewRect$1(seriesModel, api);
+  seriesModel.layoutInfo = layoutInfo;
+  var layout = seriesModel.get('layout');
+  var width = 0;
+  var height = 0;
+  var separation$$1 = null;
+
+  if (layout === 'radial') {
+    width = 2 * Math.PI;
+    height = Math.min(layoutInfo.height, layoutInfo.width) / 2;
+    separation$$1 = separation(function (node1, node2) {
+      return (node1.parentNode === node2.parentNode ? 1 : 2) / node1.depth;
+    });
+  } else {
+    width = layoutInfo.width;
+    height = layoutInfo.height;
+    separation$$1 = separation();
+  }
+
+  var virtualRoot = seriesModel.getData().tree.root;
+  var realRoot = virtualRoot.children[0];
+
+  if (realRoot) {
+    init$2(virtualRoot);
+    eachAfter(realRoot, firstWalk, separation$$1);
+    virtualRoot.hierNode.modifier = -realRoot.hierNode.prelim;
+    eachBefore(realRoot, secondWalk);
+    var left = realRoot;
+    var right = realRoot;
+    var bottom = realRoot;
+    eachBefore(realRoot, function (node) {
+      var x = node.getLayout().x;
+
+      if (x < left.getLayout().x) {
+        left = node;
+      }
+
+      if (x > right.getLayout().x) {
+        right = node;
+      }
+
+      if (node.depth > bottom.depth) {
+        bottom = node;
+      }
+    });
+    var delta = left === right ? 1 : separation$$1(left, right) / 2;
+    var tx = delta - left.getLayout().x;
+    var kx = 0;
+    var ky = 0;
+    var coorX = 0;
+    var coorY = 0;
+
+    if (layout === 'radial') {
+      kx = width / (right.getLayout().x + delta + tx); // here we use (node.depth - 1), bucause the real root's depth is 1
+
+      ky = height / (bottom.depth - 1 || 1);
+      eachBefore(realRoot, function (node) {
+        coorX = (node.getLayout().x + tx) * kx;
+        coorY = (node.depth - 1) * ky;
+        var finalCoor = radialCoordinate(coorX, coorY);
+        node.setLayout({
+          x: finalCoor.x,
+          y: finalCoor.y,
+          rawX: coorX,
+          rawY: coorY
+        }, true);
+      });
+    } else {
+      var orient = seriesModel.getOrient();
+
+      if (orient === 'RL' || orient === 'LR') {
+        ky = height / (right.getLayout().x + delta + tx);
+        kx = width / (bottom.depth - 1 || 1);
+        eachBefore(realRoot, function (node) {
+          coorY = (node.getLayout().x + tx) * ky;
+          coorX = orient === 'LR' ? (node.depth - 1) * kx : width - (node.depth - 1) * kx;
+          node.setLayout({
+            x: coorX,
+            y: coorY
+          }, true);
+        });
+      } else if (orient === 'TB' || orient === 'BT') {
+        kx = width / (right.getLayout().x + delta + tx);
+        ky = height / (bottom.depth - 1 || 1);
+        eachBefore(realRoot, function (node) {
+          coorX = (node.getLayout().x + tx) * kx;
+          coorY = orient === 'TB' ? (node.depth - 1) * ky : height - (node.depth - 1) * ky;
+          node.setLayout({
+            x: coorX,
+            y: coorY
+          }, true);
+        });
+      }
+    }
+  }
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(visualSymbol('tree', 'circle'));
+registerLayout(treeLayout);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function retrieveTargetInfo(payload, validPayloadTypes, seriesModel) {
+  if (payload && indexOf(validPayloadTypes, payload.type) >= 0) {
+    var root = seriesModel.getData().tree.root;
+    var targetNode = payload.targetNode;
+
+    if (typeof targetNode === 'string') {
+      targetNode = root.getNodeById(targetNode);
+    }
+
+    if (targetNode && root.contains(targetNode)) {
+      return {
+        node: targetNode
+      };
+    }
+
+    var targetNodeId = payload.targetNodeId;
+
+    if (targetNodeId != null && (targetNode = root.getNodeById(targetNodeId))) {
+      return {
+        node: targetNode
+      };
+    }
+  }
+} // Not includes the given node at the last item.
+
+function getPathToRoot(node) {
+  var path = [];
+
+  while (node) {
+    node = node.parentNode;
+    node && path.push(node);
+  }
+
+  return path.reverse();
+}
+function aboveViewRoot(viewRoot, node) {
+  var viewPath = getPathToRoot(viewRoot);
+  return indexOf(viewPath, node) >= 0;
+} // From root to the input node (the input node will be included).
+
+function wrapTreePathInfo(node, seriesModel) {
+  var treePathInfo = [];
+
+  while (node) {
+    var nodeDataIndex = node.dataIndex;
+    treePathInfo.push({
+      name: node.name,
+      dataIndex: nodeDataIndex,
+      value: seriesModel.getRawValue(nodeDataIndex)
+    });
+    node = node.parentNode;
+  }
+
+  treePathInfo.reverse();
+  return treePathInfo;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+SeriesModel.extend({
+  type: 'series.treemap',
+  layoutMode: 'box',
+  dependencies: ['grid', 'polar'],
+  preventUsingHoverLayer: true,
+
+  /**
+   * @type {module:echarts/data/Tree~Node}
+   */
+  _viewRoot: null,
+  defaultOption: {
+    // Disable progressive rendering
+    progressive: 0,
+    // center: ['50%', '50%'],          // not supported in ec3.
+    // size: ['80%', '80%'],            // deprecated, compatible with ec2.
+    left: 'center',
+    top: 'middle',
+    right: null,
+    bottom: null,
+    width: '80%',
+    height: '80%',
+    sort: true,
+    // Can be null or false or true
+    // (order by desc default, asc not supported yet (strange effect))
+    clipWindow: 'origin',
+    // Size of clipped window when zooming. 'origin' or 'fullscreen'
+    squareRatio: 0.5 * (1 + Math.sqrt(5)),
+    // golden ratio
+    leafDepth: null,
+    // Nodes on depth from root are regarded as leaves.
+    // Count from zero (zero represents only view root).
+    drillDownIcon: '▶',
+    // Use html character temporarily because it is complicated
+    // to align specialized icon. ▷▶❒❐▼✚
+    zoomToNodeRatio: 0.32 * 0.32,
+    // Be effective when using zoomToNode. Specify the proportion of the
+    // target node area in the view area.
+    roam: true,
+    // true, false, 'scale' or 'zoom', 'move'.
+    nodeClick: 'zoomToNode',
+    // Leaf node click behaviour: 'zoomToNode', 'link', false.
+    // If leafDepth is set and clicking a node which has children but
+    // be on left depth, the behaviour would be changing root. Otherwise
+    // use behavious defined above.
+    animation: true,
+    animationDurationUpdate: 900,
+    animationEasing: 'quinticInOut',
+    breadcrumb: {
+      show: true,
+      height: 22,
+      left: 'center',
+      top: 'bottom',
+      // right
+      // bottom
+      emptyItemWidth: 25,
+      // Width of empty node.
+      itemStyle: {
+        color: 'rgba(0,0,0,0.7)',
+        //'#5793f3',
+        borderColor: 'rgba(255,255,255,0.7)',
+        borderWidth: 1,
+        shadowColor: 'rgba(150,150,150,1)',
+        shadowBlur: 3,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        textStyle: {
+          color: '#fff'
+        }
+      },
+      emphasis: {
+        textStyle: {}
+      }
+    },
+    label: {
+      show: true,
+      // Do not use textDistance, for ellipsis rect just the same as treemap node rect.
+      distance: 0,
+      padding: 5,
+      position: 'inside',
+      // Can be [5, '5%'] or position stirng like 'insideTopLeft', ...
+      // formatter: null,
+      color: '#fff',
+      ellipsis: true // align
+      // verticalAlign
+
+    },
+    upperLabel: {
+      // Label when node is parent.
+      show: false,
+      position: [0, '50%'],
+      height: 20,
+      // formatter: null,
+      color: '#fff',
+      ellipsis: true,
+      // align: null,
+      verticalAlign: 'middle'
+    },
+    itemStyle: {
+      color: null,
+      // Can be 'none' if not necessary.
+      colorAlpha: null,
+      // Can be 'none' if not necessary.
+      colorSaturation: null,
+      // Can be 'none' if not necessary.
+      borderWidth: 0,
+      gapWidth: 0,
+      borderColor: '#fff',
+      borderColorSaturation: null // If specified, borderColor will be ineffective, and the
+      // border color is evaluated by color of current node and
+      // borderColorSaturation.
+
+    },
+    emphasis: {
+      upperLabel: {
+        show: true,
+        position: [0, '50%'],
+        color: '#fff',
+        ellipsis: true,
+        verticalAlign: 'middle'
+      }
+    },
+    visualDimension: 0,
+    // Can be 0, 1, 2, 3.
+    visualMin: null,
+    visualMax: null,
+    color: [],
+    // + treemapSeries.color should not be modified. Please only modified
+    // level[n].color (if necessary).
+    // + Specify color list of each level. level[0].color would be global
+    // color list if not specified. (see method `setDefault`).
+    // + But set as a empty array to forbid fetch color from global palette
+    // when using nodeModel.get('color'), otherwise nodes on deep level
+    // will always has color palette set and are not able to inherit color
+    // from parent node.
+    // + TreemapSeries.color can not be set as 'none', otherwise effect
+    // legend color fetching (see seriesColor.js).
+    colorAlpha: null,
+    // Array. Specify color alpha range of each level, like [0.2, 0.8]
+    colorSaturation: null,
+    // Array. Specify color saturation of each level, like [0.2, 0.5]
+    colorMappingBy: 'index',
+    // 'value' or 'index' or 'id'.
+    visibleMin: 10,
+    // If area less than this threshold (unit: pixel^2), node will not
+    // be rendered. Only works when sort is 'asc' or 'desc'.
+    childrenVisibleMin: null,
+    // If area of a node less than this threshold (unit: pixel^2),
+    // grandchildren will not show.
+    // Why grandchildren? If not grandchildren but children,
+    // some siblings show children and some not,
+    // the appearance may be mess and not consistent,
+    levels: [] // Each item: {
+    //     visibleMin, itemStyle, visualDimension, label
+    // }
+    // data: {
+    //      value: [],
+    //      children: [],
+    //      link: 'http://xxx.xxx.xxx',
+    //      target: 'blank' or 'self'
+    // }
+
+  },
+
+  /**
+   * @override
+   */
+  getInitialData: function (option, ecModel) {
+    // Create a virtual root.
+    var root = {
+      name: option.name,
+      children: option.data
+    };
+    completeTreeValue(root);
+    var levels = option.levels || []; // Used in "visual priority" in `treemapVisual.js`.
+    // This way is a little tricky, must satisfy the precondition:
+    //   1. There is no `treeNode.getModel('itemStyle.xxx')` used.
+    //   2. The `Model.prototype.getModel()` will not use any clone-like way.
+
+    var designatedVisualItemStyle = this.designatedVisualItemStyle = {};
+    var designatedVisualModel = new Model({
+      itemStyle: designatedVisualItemStyle
+    }, this, ecModel);
+    levels = option.levels = setDefault(levels, ecModel);
+    var levelModels = map(levels || [], function (levelDefine) {
+      return new Model(levelDefine, designatedVisualModel, ecModel);
+    }, this); // Make sure always a new tree is created when setOption,
+    // in TreemapView, we check whether oldTree === newTree
+    // to choose mappings approach among old shapes and new shapes.
+
+    var tree = Tree.createTree(root, this, beforeLink);
+
+    function beforeLink(nodeData) {
+      nodeData.wrapMethod('getItemModel', function (model, idx) {
+        var node = tree.getNodeByDataIndex(idx);
+        var levelModel = levelModels[node.depth]; // If no levelModel, we also need `designatedVisualModel`.
+
+        model.parentModel = levelModel || designatedVisualModel;
+        return model;
+      });
+    }
+
+    return tree.data;
+  },
+  optionUpdated: function () {
+    this.resetViewRoot();
+  },
+
+  /**
+   * @override
+   * @param {number} dataIndex
+   * @param {boolean} [mutipleSeries=false]
+   */
+  formatTooltip: function (dataIndex) {
+    var data = this.getData();
+    var value = this.getRawValue(dataIndex);
+    var formattedValue = isArray(value) ? addCommas(value[0]) : addCommas(value);
+    var name = data.getName(dataIndex);
+    return encodeHTML(name + ': ' + formattedValue);
+  },
+
+  /**
+   * Add tree path to tooltip param
+   *
+   * @override
+   * @param {number} dataIndex
+   * @return {Object}
+   */
+  getDataParams: function (dataIndex) {
+    var params = SeriesModel.prototype.getDataParams.apply(this, arguments);
+    var node = this.getData().tree.getNodeByDataIndex(dataIndex);
+    params.treePathInfo = wrapTreePathInfo(node, this);
+    return params;
+  },
+
+  /**
+   * @public
+   * @param {Object} layoutInfo {
+   *                                x: containerGroup x
+   *                                y: containerGroup y
+   *                                width: containerGroup width
+   *                                height: containerGroup height
+   *                            }
+   */
+  setLayoutInfo: function (layoutInfo) {
+    /**
+     * @readOnly
+     * @type {Object}
+     */
+    this.layoutInfo = this.layoutInfo || {};
+    extend(this.layoutInfo, layoutInfo);
+  },
+
+  /**
+   * @param  {string} id
+   * @return {number} index
+   */
+  mapIdToIndex: function (id) {
+    // A feature is implemented:
+    // index is monotone increasing with the sequence of
+    // input id at the first time.
+    // This feature can make sure that each data item and its
+    // mapped color have the same index between data list and
+    // color list at the beginning, which is useful for user
+    // to adjust data-color mapping.
+
+    /**
+     * @private
+     * @type {Object}
+     */
+    var idIndexMap = this._idIndexMap;
+
+    if (!idIndexMap) {
+      idIndexMap = this._idIndexMap = createHashMap();
+      /**
+       * @private
+       * @type {number}
+       */
+
+      this._idIndexMapCount = 0;
+    }
+
+    var index = idIndexMap.get(id);
+
+    if (index == null) {
+      idIndexMap.set(id, index = this._idIndexMapCount++);
+    }
+
+    return index;
+  },
+  getViewRoot: function () {
+    return this._viewRoot;
+  },
+
+  /**
+   * @param {module:echarts/data/Tree~Node} [viewRoot]
+   */
+  resetViewRoot: function (viewRoot) {
+    viewRoot ? this._viewRoot = viewRoot : viewRoot = this._viewRoot;
+    var root = this.getRawData().tree.root;
+
+    if (!viewRoot || viewRoot !== root && !root.contains(viewRoot)) {
+      this._viewRoot = root;
+    }
+  }
+});
+/**
+ * @param {Object} dataNode
+ */
+
+function completeTreeValue(dataNode) {
+  // Postorder travel tree.
+  // If value of none-leaf node is not set,
+  // calculate it by suming up the value of all children.
+  var sum = 0;
+  each$1(dataNode.children, function (child) {
+    completeTreeValue(child);
+    var childValue = child.value;
+    isArray(childValue) && (childValue = childValue[0]);
+    sum += childValue;
+  });
+  var thisValue = dataNode.value;
+
+  if (isArray(thisValue)) {
+    thisValue = thisValue[0];
+  }
+
+  if (thisValue == null || isNaN(thisValue)) {
+    thisValue = sum;
+  } // Value should not less than 0.
+
+
+  if (thisValue < 0) {
+    thisValue = 0;
+  }
+
+  isArray(dataNode.value) ? dataNode.value[0] = thisValue : dataNode.value = thisValue;
+}
+/**
+ * set default to level configuration
+ */
+
+
+function setDefault(levels, ecModel) {
+  var globalColorList = ecModel.get('color');
+
+  if (!globalColorList) {
+    return;
+  }
+
+  levels = levels || [];
+  var hasColorDefine;
+  each$1(levels, function (levelDefine) {
+    var model = new Model(levelDefine);
+    var modelColor = model.get('color');
+
+    if (model.get('itemStyle.color') || modelColor && modelColor !== 'none') {
+      hasColorDefine = true;
+    }
+  });
+
+  if (!hasColorDefine) {
+    var level0 = levels[0] || (levels[0] = {});
+    level0.color = globalColorList.slice();
+  }
+
+  return levels;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var TEXT_PADDING = 8;
+var ITEM_GAP = 8;
+var ARRAY_LENGTH = 5;
+
+function Breadcrumb(containerGroup) {
+  /**
+   * @private
+   * @type {module:zrender/container/Group}
+   */
+  this.group = new Group();
+  containerGroup.add(this.group);
+}
+
+Breadcrumb.prototype = {
+  constructor: Breadcrumb,
+  render: function (seriesModel, api, targetNode, onSelect) {
+    var model = seriesModel.getModel('breadcrumb');
+    var thisGroup = this.group;
+    thisGroup.removeAll();
+
+    if (!model.get('show') || !targetNode) {
+      return;
+    }
+
+    var normalStyleModel = model.getModel('itemStyle'); // var emphasisStyleModel = model.getModel('emphasis.itemStyle');
+
+    var textStyleModel = normalStyleModel.getModel('textStyle');
+    var layoutParam = {
+      pos: {
+        left: model.get('left'),
+        right: model.get('right'),
+        top: model.get('top'),
+        bottom: model.get('bottom')
+      },
+      box: {
+        width: api.getWidth(),
+        height: api.getHeight()
+      },
+      emptyItemWidth: model.get('emptyItemWidth'),
+      totalWidth: 0,
+      renderList: []
+    };
+
+    this._prepare(targetNode, layoutParam, textStyleModel);
+
+    this._renderContent(seriesModel, layoutParam, normalStyleModel, textStyleModel, onSelect);
+
+    positionElement(thisGroup, layoutParam.pos, layoutParam.box);
+  },
+
+  /**
+   * Prepare render list and total width
+   * @private
+   */
+  _prepare: function (targetNode, layoutParam, textStyleModel) {
+    for (var node = targetNode; node; node = node.parentNode) {
+      var text = node.getModel().get('name');
+      var textRect = textStyleModel.getTextRect(text);
+      var itemWidth = Math.max(textRect.width + TEXT_PADDING * 2, layoutParam.emptyItemWidth);
+      layoutParam.totalWidth += itemWidth + ITEM_GAP;
+      layoutParam.renderList.push({
+        node: node,
+        text: text,
+        width: itemWidth
+      });
+    }
+  },
+
+  /**
+   * @private
+   */
+  _renderContent: function (seriesModel, layoutParam, normalStyleModel, textStyleModel, onSelect) {
+    // Start rendering.
+    var lastX = 0;
+    var emptyItemWidth = layoutParam.emptyItemWidth;
+    var height = seriesModel.get('breadcrumb.height');
+    var availableSize = getAvailableSize(layoutParam.pos, layoutParam.box);
+    var totalWidth = layoutParam.totalWidth;
+    var renderList = layoutParam.renderList;
+
+    for (var i = renderList.length - 1; i >= 0; i--) {
+      var item = renderList[i];
+      var itemNode = item.node;
+      var itemWidth = item.width;
+      var text = item.text; // Hdie text and shorten width if necessary.
+
+      if (totalWidth > availableSize.width) {
+        totalWidth -= itemWidth - emptyItemWidth;
+        itemWidth = emptyItemWidth;
+        text = null;
+      }
+
+      var el = new Polygon({
+        shape: {
+          points: makeItemPoints(lastX, 0, itemWidth, height, i === renderList.length - 1, i === 0)
+        },
+        style: defaults(normalStyleModel.getItemStyle(), {
+          lineJoin: 'bevel',
+          text: text,
+          textFill: textStyleModel.getTextColor(),
+          textFont: textStyleModel.getFont()
+        }),
+        z: 10,
+        onclick: curry(onSelect, itemNode)
+      });
+      this.group.add(el);
+      packEventData(el, seriesModel, itemNode);
+      lastX += itemWidth + ITEM_GAP;
+    }
+  },
+
+  /**
+   * @override
+   */
+  remove: function () {
+    this.group.removeAll();
+  }
+};
+
+function makeItemPoints(x, y, itemWidth, itemHeight, head, tail) {
+  var points = [[head ? x : x - ARRAY_LENGTH, y], [x + itemWidth, y], [x + itemWidth, y + itemHeight], [head ? x : x - ARRAY_LENGTH, y + itemHeight]];
+  !tail && points.splice(2, 0, [x + itemWidth + ARRAY_LENGTH, y + itemHeight / 2]);
+  !head && points.push([x, y + itemHeight / 2]);
+  return points;
+} // Package custom mouse event.
+
+
+function packEventData(el, seriesModel, itemNode) {
+  el.eventData = {
+    componentType: 'series',
+    componentSubType: 'treemap',
+    componentIndex: seriesModel.componentIndex,
+    seriesIndex: seriesModel.componentIndex,
+    seriesName: seriesModel.name,
+    seriesType: 'treemap',
+    selfType: 'breadcrumb',
+    // Distinguish with click event on treemap node.
+    nodeData: {
+      dataIndex: itemNode && itemNode.dataIndex,
+      name: itemNode && itemNode.name
+    },
+    treePathInfo: itemNode && wrapTreePathInfo(itemNode, seriesModel)
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @param {number} [time=500] Time in ms
+ * @param {string} [easing='linear']
+ * @param {number} [delay=0]
+ * @param {Function} [callback]
+ *
+ * @example
+ *  // Animate position
+ *  animation
+ *      .createWrap()
+ *      .add(el1, {position: [10, 10]})
+ *      .add(el2, {shape: {width: 500}, style: {fill: 'red'}}, 400)
+ *      .done(function () { // done })
+ *      .start('cubicOut');
+ */
+
+function createWrap() {
+  var storage = [];
+  var elExistsMap = {};
+  var doneCallback;
+  return {
+    /**
+     * Caution: a el can only be added once, otherwise 'done'
+     * might not be called. This method checks this (by el.id),
+     * suppresses adding and returns false when existing el found.
+     *
+     * @param {modele:zrender/Element} el
+     * @param {Object} target
+     * @param {number} [time=500]
+     * @param {number} [delay=0]
+     * @param {string} [easing='linear']
+     * @return {boolean} Whether adding succeeded.
+     *
+     * @example
+     *     add(el, target, time, delay, easing);
+     *     add(el, target, time, easing);
+     *     add(el, target, time);
+     *     add(el, target);
+     */
+    add: function (el, target, time, delay, easing) {
+      if (isString(delay)) {
+        easing = delay;
+        delay = 0;
+      }
+
+      if (elExistsMap[el.id]) {
+        return false;
+      }
+
+      elExistsMap[el.id] = 1;
+      storage.push({
+        el: el,
+        target: target,
+        time: time,
+        delay: delay,
+        easing: easing
+      });
+      return true;
+    },
+
+    /**
+     * Only execute when animation finished. Will not execute when any
+     * of 'stop' or 'stopAnimation' called.
+     *
+     * @param {Function} callback
+     */
+    done: function (callback) {
+      doneCallback = callback;
+      return this;
+    },
+
+    /**
+     * Will stop exist animation firstly.
+     */
+    start: function () {
+      var count = storage.length;
+
+      for (var i = 0, len = storage.length; i < len; i++) {
+        var item = storage[i];
+        item.el.animateTo(item.target, item.time, item.delay, item.easing, done);
+      }
+
+      return this;
+
+      function done() {
+        count--;
+
+        if (!count) {
+          storage.length = 0;
+          elExistsMap = {};
+          doneCallback && doneCallback();
+        }
+      }
+    }
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var bind$1 = bind;
+var Group$2 = Group;
+var Rect$1 = Rect;
+var each$8 = each$1;
+var DRAG_THRESHOLD = 3;
+var PATH_LABEL_NOAMAL = ['label'];
+var PATH_LABEL_EMPHASIS = ['emphasis', 'label'];
+var PATH_UPPERLABEL_NORMAL = ['upperLabel'];
+var PATH_UPPERLABEL_EMPHASIS = ['emphasis', 'upperLabel'];
+var Z_BASE = 10; // Should bigger than every z.
+
+var Z_BG = 1;
+var Z_CONTENT = 2;
+var getItemStyleEmphasis = makeStyleMapper([['fill', 'color'], // `borderColor` and `borderWidth` has been occupied,
+// so use `stroke` to indicate the stroke of the rect.
+['stroke', 'strokeColor'], ['lineWidth', 'strokeWidth'], ['shadowBlur'], ['shadowOffsetX'], ['shadowOffsetY'], ['shadowColor']]);
+
+var getItemStyleNormal = function (model) {
+  // Normal style props should include emphasis style props.
+  var itemStyle = getItemStyleEmphasis(model); // Clear styles set by emphasis.
+
+  itemStyle.stroke = itemStyle.fill = itemStyle.lineWidth = null;
+  return itemStyle;
+};
+
+extendChartView({
+  type: 'treemap',
+
+  /**
+   * @override
+   */
+  init: function (o, api) {
+    /**
+     * @private
+     * @type {module:zrender/container/Group}
+     */
+    this._containerGroup;
+    /**
+     * @private
+     * @type {Object.<string, Array.<module:zrender/container/Group>>}
+     */
+
+    this._storage = createStorage();
+    /**
+     * @private
+     * @type {module:echarts/data/Tree}
+     */
+
+    this._oldTree;
+    /**
+     * @private
+     * @type {module:echarts/chart/treemap/Breadcrumb}
+     */
+
+    this._breadcrumb;
+    /**
+     * @private
+     * @type {module:echarts/component/helper/RoamController}
+     */
+
+    this._controller;
+    /**
+     * 'ready', 'animating'
+     * @private
+     */
+
+    this._state = 'ready';
+  },
+
+  /**
+   * @override
+   */
+  render: function (seriesModel, ecModel, api, payload) {
+    var models = ecModel.findComponents({
+      mainType: 'series',
+      subType: 'treemap',
+      query: payload
+    });
+
+    if (indexOf(models, seriesModel) < 0) {
+      return;
+    }
+
+    this.seriesModel = seriesModel;
+    this.api = api;
+    this.ecModel = ecModel;
+    var types = ['treemapZoomToNode', 'treemapRootToNode'];
+    var targetInfo = retrieveTargetInfo(payload, types, seriesModel);
+    var payloadType = payload && payload.type;
+    var layoutInfo = seriesModel.layoutInfo;
+    var isInit = !this._oldTree;
+    var thisStorage = this._storage; // Mark new root when action is treemapRootToNode.
+
+    var reRoot = payloadType === 'treemapRootToNode' && targetInfo && thisStorage ? {
+      rootNodeGroup: thisStorage.nodeGroup[targetInfo.node.getRawIndex()],
+      direction: payload.direction
+    } : null;
+
+    var containerGroup = this._giveContainerGroup(layoutInfo);
+
+    var renderResult = this._doRender(containerGroup, seriesModel, reRoot);
+
+    !isInit && (!payloadType || payloadType === 'treemapZoomToNode' || payloadType === 'treemapRootToNode') ? this._doAnimation(containerGroup, renderResult, seriesModel, reRoot) : renderResult.renderFinally();
+
+    this._resetController(api);
+
+    this._renderBreadcrumb(seriesModel, api, targetInfo);
+  },
+
+  /**
+   * @private
+   */
+  _giveContainerGroup: function (layoutInfo) {
+    var containerGroup = this._containerGroup;
+
+    if (!containerGroup) {
+      // FIXME
+      // 加一层containerGroup是为了clip，但是现在clip功能并没有实现。
+      containerGroup = this._containerGroup = new Group$2();
+
+      this._initEvents(containerGroup);
+
+      this.group.add(containerGroup);
+    }
+
+    containerGroup.attr('position', [layoutInfo.x, layoutInfo.y]);
+    return containerGroup;
+  },
+
+  /**
+   * @private
+   */
+  _doRender: function (containerGroup, seriesModel, reRoot) {
+    var thisTree = seriesModel.getData().tree;
+    var oldTree = this._oldTree; // Clear last shape records.
+
+    var lastsForAnimation = createStorage();
+    var thisStorage = createStorage();
+    var oldStorage = this._storage;
+    var willInvisibleEls = [];
+    var doRenderNode = curry(renderNode, seriesModel, thisStorage, oldStorage, reRoot, lastsForAnimation, willInvisibleEls); // Notice: when thisTree and oldTree are the same tree (see list.cloneShallow),
+    // the oldTree is actually losted, so we can not find all of the old graphic
+    // elements from tree. So we use this stragegy: make element storage, move
+    // from old storage to new storage, clear old storage.
+
+    dualTravel(thisTree.root ? [thisTree.root] : [], oldTree && oldTree.root ? [oldTree.root] : [], containerGroup, thisTree === oldTree || !oldTree, 0); // Process all removing.
+
+    var willDeleteEls = clearStorage(oldStorage);
+    this._oldTree = thisTree;
+    this._storage = thisStorage;
+    return {
+      lastsForAnimation: lastsForAnimation,
+      willDeleteEls: willDeleteEls,
+      renderFinally: renderFinally
+    };
+
+    function dualTravel(thisViewChildren, oldViewChildren, parentGroup, sameTree, depth) {
+      // When 'render' is triggered by action,
+      // 'this' and 'old' may be the same tree,
+      // we use rawIndex in that case.
+      if (sameTree) {
+        oldViewChildren = thisViewChildren;
+        each$8(thisViewChildren, function (child, index) {
+          !child.isRemoved() && processNode(index, index);
+        });
+      } // Diff hierarchically (diff only in each subtree, but not whole).
+      // because, consistency of view is important.
+      else {
+          new DataDiffer(oldViewChildren, thisViewChildren, getKey, getKey).add(processNode).update(processNode).remove(curry(processNode, null)).execute();
+        }
+
+      function getKey(node) {
+        // Identify by name or raw index.
+        return node.getId();
+      }
+
+      function processNode(newIndex, oldIndex) {
+        var thisNode = newIndex != null ? thisViewChildren[newIndex] : null;
+        var oldNode = oldIndex != null ? oldViewChildren[oldIndex] : null;
+        var group = doRenderNode(thisNode, oldNode, parentGroup, depth);
+        group && dualTravel(thisNode && thisNode.viewChildren || [], oldNode && oldNode.viewChildren || [], group, sameTree, depth + 1);
+      }
+    }
+
+    function clearStorage(storage) {
+      var willDeleteEls = createStorage();
+      storage && each$8(storage, function (store, storageName) {
+        var delEls = willDeleteEls[storageName];
+        each$8(store, function (el) {
+          el && (delEls.push(el), el.__tmWillDelete = 1);
+        });
+      });
+      return willDeleteEls;
+    }
+
+    function renderFinally() {
+      each$8(willDeleteEls, function (els) {
+        each$8(els, function (el) {
+          el.parent && el.parent.remove(el);
+        });
+      });
+      each$8(willInvisibleEls, function (el) {
+        el.invisible = true; // Setting invisible is for optimizing, so no need to set dirty,
+        // just mark as invisible.
+
+        el.dirty();
+      });
+    }
+  },
+
+  /**
+   * @private
+   */
+  _doAnimation: function (containerGroup, renderResult, seriesModel, reRoot) {
+    if (!seriesModel.get('animation')) {
+      return;
+    }
+
+    var duration = seriesModel.get('animationDurationUpdate');
+    var easing = seriesModel.get('animationEasing');
+    var animationWrap = createWrap(); // Make delete animations.
+
+    each$8(renderResult.willDeleteEls, function (store, storageName) {
+      each$8(store, function (el, rawIndex) {
+        if (el.invisible) {
+          return;
+        }
+
+        var parent = el.parent; // Always has parent, and parent is nodeGroup.
+
+        var target;
+
+        if (reRoot && reRoot.direction === 'drillDown') {
+          target = parent === reRoot.rootNodeGroup // This is the content element of view root.
+          // Only `content` will enter this branch, because
+          // `background` and `nodeGroup` will not be deleted.
+          ? {
+            shape: {
+              x: 0,
+              y: 0,
+              width: parent.__tmNodeWidth,
+              height: parent.__tmNodeHeight
+            },
+            style: {
+              opacity: 0
+            } // Others.
+
+          } : {
+            style: {
+              opacity: 0
+            }
+          };
+        } else {
+          var targetX = 0;
+          var targetY = 0;
+
+          if (!parent.__tmWillDelete) {
+            // Let node animate to right-bottom corner, cooperating with fadeout,
+            // which is appropriate for user understanding.
+            // Divided by 2 for reRoot rolling up effect.
+            targetX = parent.__tmNodeWidth / 2;
+            targetY = parent.__tmNodeHeight / 2;
+          }
+
+          target = storageName === 'nodeGroup' ? {
+            position: [targetX, targetY],
+            style: {
+              opacity: 0
+            }
+          } : {
+            shape: {
+              x: targetX,
+              y: targetY,
+              width: 0,
+              height: 0
+            },
+            style: {
+              opacity: 0
+            }
+          };
+        }
+
+        target && animationWrap.add(el, target, duration, easing);
+      });
+    }); // Make other animations
+
+    each$8(this._storage, function (store, storageName) {
+      each$8(store, function (el, rawIndex) {
+        var last = renderResult.lastsForAnimation[storageName][rawIndex];
+        var target = {};
+
+        if (!last) {
+          return;
+        }
+
+        if (storageName === 'nodeGroup') {
+          if (last.old) {
+            target.position = el.position.slice();
+            el.attr('position', last.old);
+          }
+        } else {
+          if (last.old) {
+            target.shape = extend({}, el.shape);
+            el.setShape(last.old);
+          }
+
+          if (last.fadein) {
+            el.setStyle('opacity', 0);
+            target.style = {
+              opacity: 1
+            };
+          } // When animation is stopped for succedent animation starting,
+          // el.style.opacity might not be 1
+          else if (el.style.opacity !== 1) {
+              target.style = {
+                opacity: 1
+              };
+            }
+        }
+
+        animationWrap.add(el, target, duration, easing);
+      });
+    }, this);
+    this._state = 'animating';
+    animationWrap.done(bind$1(function () {
+      this._state = 'ready';
+      renderResult.renderFinally();
+    }, this)).start();
+  },
+
+  /**
+   * @private
+   */
+  _resetController: function (api) {
+    var controller = this._controller; // Init controller.
+
+    if (!controller) {
+      controller = this._controller = new RoamController(api.getZr());
+      controller.enable(this.seriesModel.get('roam'));
+      controller.on('pan', bind$1(this._onPan, this));
+      controller.on('zoom', bind$1(this._onZoom, this));
+    }
+
+    var rect = new BoundingRect(0, 0, api.getWidth(), api.getHeight());
+    controller.setPointerChecker(function (e, x, y) {
+      return rect.contain(x, y);
+    });
+  },
+
+  /**
+   * @private
+   */
+  _clearController: function () {
+    var controller = this._controller;
+
+    if (controller) {
+      controller.dispose();
+      controller = null;
+    }
+  },
+
+  /**
+   * @private
+   */
+  _onPan: function (e) {
+    if (this._state !== 'animating' && (Math.abs(e.dx) > DRAG_THRESHOLD || Math.abs(e.dy) > DRAG_THRESHOLD)) {
+      // These param must not be cached.
+      var root = this.seriesModel.getData().tree.root;
+
+      if (!root) {
+        return;
+      }
+
+      var rootLayout = root.getLayout();
+
+      if (!rootLayout) {
+        return;
+      }
+
+      this.api.dispatchAction({
+        type: 'treemapMove',
+        from: this.uid,
+        seriesId: this.seriesModel.id,
+        rootRect: {
+          x: rootLayout.x + e.dx,
+          y: rootLayout.y + e.dy,
+          width: rootLayout.width,
+          height: rootLayout.height
+        }
+      });
+    }
+  },
+
+  /**
+   * @private
+   */
+  _onZoom: function (e) {
+    var mouseX = e.originX;
+    var mouseY = e.originY;
+
+    if (this._state !== 'animating') {
+      // These param must not be cached.
+      var root = this.seriesModel.getData().tree.root;
+
+      if (!root) {
+        return;
+      }
+
+      var rootLayout = root.getLayout();
+
+      if (!rootLayout) {
+        return;
+      }
+
+      var rect = new BoundingRect(rootLayout.x, rootLayout.y, rootLayout.width, rootLayout.height);
+      var layoutInfo = this.seriesModel.layoutInfo; // Transform mouse coord from global to containerGroup.
+
+      mouseX -= layoutInfo.x;
+      mouseY -= layoutInfo.y; // Scale root bounding rect.
+
+      var m = create$1();
+      translate(m, m, [-mouseX, -mouseY]);
+      scale$1(m, m, [e.scale, e.scale]);
+      translate(m, m, [mouseX, mouseY]);
+      rect.applyTransform(m);
+      this.api.dispatchAction({
+        type: 'treemapRender',
+        from: this.uid,
+        seriesId: this.seriesModel.id,
+        rootRect: {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height
+        }
+      });
+    }
+  },
+
+  /**
+   * @private
+   */
+  _initEvents: function (containerGroup) {
+    containerGroup.on('click', function (e) {
+      if (this._state !== 'ready') {
+        return;
+      }
+
+      var nodeClick = this.seriesModel.get('nodeClick', true);
+
+      if (!nodeClick) {
+        return;
+      }
+
+      var targetInfo = this.findTarget(e.offsetX, e.offsetY);
+
+      if (!targetInfo) {
+        return;
+      }
+
+      var node = targetInfo.node;
+
+      if (node.getLayout().isLeafRoot) {
+        this._rootToNode(targetInfo);
+      } else {
+        if (nodeClick === 'zoomToNode') {
+          this._zoomToNode(targetInfo);
+        } else if (nodeClick === 'link') {
+          var itemModel = node.hostTree.data.getItemModel(node.dataIndex);
+          var link = itemModel.get('link', true);
+          var linkTarget = itemModel.get('target', true) || 'blank';
+          link && windowOpen(link, linkTarget);
+        }
+      }
+    }, this);
+  },
+
+  /**
+   * @private
+   */
+  _renderBreadcrumb: function (seriesModel, api, targetInfo) {
+    if (!targetInfo) {
+      targetInfo = seriesModel.get('leafDepth', true) != null ? {
+        node: seriesModel.getViewRoot() // FIXME
+        // better way?
+        // Find breadcrumb tail on center of containerGroup.
+
+      } : this.findTarget(api.getWidth() / 2, api.getHeight() / 2);
+
+      if (!targetInfo) {
+        targetInfo = {
+          node: seriesModel.getData().tree.root
+        };
+      }
+    }
+
+    (this._breadcrumb || (this._breadcrumb = new Breadcrumb(this.group))).render(seriesModel, api, targetInfo.node, bind$1(onSelect, this));
+
+    function onSelect(node) {
+      if (this._state !== 'animating') {
+        aboveViewRoot(seriesModel.getViewRoot(), node) ? this._rootToNode({
+          node: node
+        }) : this._zoomToNode({
+          node: node
+        });
+      }
+    }
+  },
+
+  /**
+   * @override
+   */
+  remove: function () {
+    this._clearController();
+
+    this._containerGroup && this._containerGroup.removeAll();
+    this._storage = createStorage();
+    this._state = 'ready';
+    this._breadcrumb && this._breadcrumb.remove();
+  },
+  dispose: function () {
+    this._clearController();
+  },
+
+  /**
+   * @private
+   */
+  _zoomToNode: function (targetInfo) {
+    this.api.dispatchAction({
+      type: 'treemapZoomToNode',
+      from: this.uid,
+      seriesId: this.seriesModel.id,
+      targetNode: targetInfo.node
+    });
+  },
+
+  /**
+   * @private
+   */
+  _rootToNode: function (targetInfo) {
+    this.api.dispatchAction({
+      type: 'treemapRootToNode',
+      from: this.uid,
+      seriesId: this.seriesModel.id,
+      targetNode: targetInfo.node
+    });
+  },
+
+  /**
+   * @public
+   * @param {number} x Global coord x.
+   * @param {number} y Global coord y.
+   * @return {Object} info If not found, return undefined;
+   * @return {number} info.node Target node.
+   * @return {number} info.offsetX x refer to target node.
+   * @return {number} info.offsetY y refer to target node.
+   */
+  findTarget: function (x, y) {
+    var targetInfo;
+    var viewRoot = this.seriesModel.getViewRoot();
+    viewRoot.eachNode({
+      attr: 'viewChildren',
+      order: 'preorder'
+    }, function (node) {
+      var bgEl = this._storage.background[node.getRawIndex()]; // If invisible, there might be no element.
+
+
+      if (bgEl) {
+        var point = bgEl.transformCoordToLocal(x, y);
+        var shape = bgEl.shape; // For performance consideration, dont use 'getBoundingRect'.
+
+        if (shape.x <= point[0] && point[0] <= shape.x + shape.width && shape.y <= point[1] && point[1] <= shape.y + shape.height) {
+          targetInfo = {
+            node: node,
+            offsetX: point[0],
+            offsetY: point[1]
+          };
+        } else {
+          return false; // Suppress visit subtree.
+        }
+      }
+    }, this);
+    return targetInfo;
+  }
+});
+/**
+ * @inner
+ */
+
+function createStorage() {
+  return {
+    nodeGroup: [],
+    background: [],
+    content: []
+  };
+}
+/**
+ * @inner
+ * @return Return undefined means do not travel further.
+ */
+
+
+function renderNode(seriesModel, thisStorage, oldStorage, reRoot, lastsForAnimation, willInvisibleEls, thisNode, oldNode, parentGroup, depth) {
+  // Whether under viewRoot.
+  if (!thisNode) {
+    // Deleting nodes will be performed finally. This method just find
+    // element from old storage, or create new element, set them to new
+    // storage, and set styles.
+    return;
+  } // -------------------------------------------------------------------
+  // Start of closure variables available in "Procedures in renderNode".
+
+
+  var thisLayout = thisNode.getLayout();
+  var data = seriesModel.getData(); // Only for enabling highlight/downplay. Clear firstly.
+  // Because some node will not be rendered.
+
+  data.setItemGraphicEl(thisNode.dataIndex, null);
+
+  if (!thisLayout || !thisLayout.isInView) {
+    return;
+  }
+
+  var thisWidth = thisLayout.width;
+  var thisHeight = thisLayout.height;
+  var borderWidth = thisLayout.borderWidth;
+  var thisInvisible = thisLayout.invisible;
+  var thisRawIndex = thisNode.getRawIndex();
+  var oldRawIndex = oldNode && oldNode.getRawIndex();
+  var thisViewChildren = thisNode.viewChildren;
+  var upperHeight = thisLayout.upperHeight;
+  var isParent = thisViewChildren && thisViewChildren.length;
+  var itemStyleNormalModel = thisNode.getModel('itemStyle');
+  var itemStyleEmphasisModel = thisNode.getModel('emphasis.itemStyle'); // End of closure ariables available in "Procedures in renderNode".
+  // -----------------------------------------------------------------
+  // Node group
+
+  var group = giveGraphic('nodeGroup', Group$2);
+
+  if (!group) {
+    return;
+  }
+
+  parentGroup.add(group); // x,y are not set when el is above view root.
+
+  group.attr('position', [thisLayout.x || 0, thisLayout.y || 0]);
+  group.__tmNodeWidth = thisWidth;
+  group.__tmNodeHeight = thisHeight;
+
+  if (thisLayout.isAboveViewRoot) {
+    return group;
+  }
+
+  var nodeModel = thisNode.getModel(); // Background
+
+  var bg = giveGraphic('background', Rect$1, depth, Z_BG);
+  bg && renderBackground(group, bg, isParent && thisLayout.upperLabelHeight); // No children, render content.
+
+  if (isParent) {
+    // Because of the implementation about "traverse" in graphic hover style, we
+    // can not set hover listener on the "group" of non-leaf node. Otherwise the
+    // hover event from the descendents will be listenered.
+    if (isHighDownDispatcher(group)) {
+      setAsHighDownDispatcher(group, false);
+    }
+
+    if (bg) {
+      setAsHighDownDispatcher(bg, true); // Only for enabling highlight/downplay.
+
+      data.setItemGraphicEl(thisNode.dataIndex, bg);
+    }
+  } else {
+    var content = giveGraphic('content', Rect$1, depth, Z_CONTENT);
+    content && renderContent(group, content);
+
+    if (bg && isHighDownDispatcher(bg)) {
+      setAsHighDownDispatcher(bg, false);
+    }
+
+    setAsHighDownDispatcher(group, true); // Only for enabling highlight/downplay.
+
+    data.setItemGraphicEl(thisNode.dataIndex, group);
+  }
+
+  return group; // ----------------------------
+  // | Procedures in renderNode |
+  // ----------------------------
+
+  function renderBackground(group, bg, useUpperLabel) {
+    // For tooltip.
+    bg.dataIndex = thisNode.dataIndex;
+    bg.seriesIndex = seriesModel.seriesIndex;
+    bg.setShape({
+      x: 0,
+      y: 0,
+      width: thisWidth,
+      height: thisHeight
+    });
+
+    if (thisInvisible) {
+      // If invisible, do not set visual, otherwise the element will
+      // change immediately before animation. We think it is OK to
+      // remain its origin color when moving out of the view window.
+      processInvisible(bg);
+    } else {
+      bg.invisible = false;
+      var visualBorderColor = thisNode.getVisual('borderColor', true);
+      var emphasisBorderColor = itemStyleEmphasisModel.get('borderColor');
+      var normalStyle = getItemStyleNormal(itemStyleNormalModel);
+      normalStyle.fill = visualBorderColor;
+      var emphasisStyle = getItemStyleEmphasis(itemStyleEmphasisModel);
+      emphasisStyle.fill = emphasisBorderColor;
+
+      if (useUpperLabel) {
+        var upperLabelWidth = thisWidth - 2 * borderWidth;
+        prepareText(normalStyle, emphasisStyle, visualBorderColor, upperLabelWidth, upperHeight, {
+          x: borderWidth,
+          y: 0,
+          width: upperLabelWidth,
+          height: upperHeight
+        });
+      } // For old bg.
+      else {
+          normalStyle.text = emphasisStyle.text = null;
+        }
+
+      bg.setStyle(normalStyle);
+      setElementHoverStyle(bg, emphasisStyle);
+    }
+
+    group.add(bg);
+  }
+
+  function renderContent(group, content) {
+    // For tooltip.
+    content.dataIndex = thisNode.dataIndex;
+    content.seriesIndex = seriesModel.seriesIndex;
+    var contentWidth = Math.max(thisWidth - 2 * borderWidth, 0);
+    var contentHeight = Math.max(thisHeight - 2 * borderWidth, 0);
+    content.culling = true;
+    content.setShape({
+      x: borderWidth,
+      y: borderWidth,
+      width: contentWidth,
+      height: contentHeight
+    });
+
+    if (thisInvisible) {
+      // If invisible, do not set visual, otherwise the element will
+      // change immediately before animation. We think it is OK to
+      // remain its origin color when moving out of the view window.
+      processInvisible(content);
+    } else {
+      content.invisible = false;
+      var visualColor = thisNode.getVisual('color', true);
+      var normalStyle = getItemStyleNormal(itemStyleNormalModel);
+      normalStyle.fill = visualColor;
+      var emphasisStyle = getItemStyleEmphasis(itemStyleEmphasisModel);
+      prepareText(normalStyle, emphasisStyle, visualColor, contentWidth, contentHeight);
+      content.setStyle(normalStyle);
+      setElementHoverStyle(content, emphasisStyle);
+    }
+
+    group.add(content);
+  }
+
+  function processInvisible(element) {
+    // Delay invisible setting utill animation finished,
+    // avoid element vanish suddenly before animation.
+    !element.invisible && willInvisibleEls.push(element);
+  }
+
+  function prepareText(normalStyle, emphasisStyle, visualColor, width, height, upperLabelRect) {
+    var defaultText = nodeModel.get('name');
+    var normalLabelModel = nodeModel.getModel(upperLabelRect ? PATH_UPPERLABEL_NORMAL : PATH_LABEL_NOAMAL);
+    var emphasisLabelModel = nodeModel.getModel(upperLabelRect ? PATH_UPPERLABEL_EMPHASIS : PATH_LABEL_EMPHASIS);
+    var isShow = normalLabelModel.getShallow('show');
+    setLabelStyle(normalStyle, emphasisStyle, normalLabelModel, emphasisLabelModel, {
+      defaultText: isShow ? defaultText : null,
+      autoColor: visualColor,
+      isRectText: true,
+      labelFetcher: seriesModel,
+      labelDataIndex: thisNode.dataIndex,
+      labelProp: upperLabelRect ? 'upperLabel' : 'label'
+    });
+    addDrillDownIcon(normalStyle, upperLabelRect, thisLayout);
+    addDrillDownIcon(emphasisStyle, upperLabelRect, thisLayout);
+    upperLabelRect && (normalStyle.textRect = clone(upperLabelRect));
+    normalStyle.truncate = isShow && normalLabelModel.get('ellipsis') ? {
+      outerWidth: width,
+      outerHeight: height,
+      minChar: 2
+    } : null;
+  }
+
+  function addDrillDownIcon(style, upperLabelRect, thisLayout) {
+    var text = style.text;
+
+    if (!upperLabelRect && thisLayout.isLeafRoot && text != null) {
+      var iconChar = seriesModel.get('drillDownIcon', true);
+      style.text = iconChar ? iconChar + ' ' + text : text;
+    }
+  }
+
+  function giveGraphic(storageName, Ctor, depth, z) {
+    var element = oldRawIndex != null && oldStorage[storageName][oldRawIndex];
+    var lasts = lastsForAnimation[storageName];
+
+    if (element) {
+      // Remove from oldStorage
+      oldStorage[storageName][oldRawIndex] = null;
+      prepareAnimationWhenHasOld(lasts, element, storageName);
+    } // If invisible and no old element, do not create new element (for optimizing).
+    else if (!thisInvisible) {
+        element = new Ctor({
+          z: calculateZ(depth, z)
+        });
+        element.__tmDepth = depth;
+        element.__tmStorageName = storageName;
+        prepareAnimationWhenNoOld(lasts, element, storageName);
+      } // Set to thisStorage
+
+
+    return thisStorage[storageName][thisRawIndex] = element;
+  }
+
+  function prepareAnimationWhenHasOld(lasts, element, storageName) {
+    var lastCfg = lasts[thisRawIndex] = {};
+    lastCfg.old = storageName === 'nodeGroup' ? element.position.slice() : extend({}, element.shape);
+  } // If a element is new, we need to find the animation start point carefully,
+  // otherwise it will looks strange when 'zoomToNode'.
+
+
+  function prepareAnimationWhenNoOld(lasts, element, storageName) {
+    var lastCfg = lasts[thisRawIndex] = {};
+    var parentNode = thisNode.parentNode;
+
+    if (parentNode && (!reRoot || reRoot.direction === 'drillDown')) {
+      var parentOldX = 0;
+      var parentOldY = 0; // New nodes appear from right-bottom corner in 'zoomToNode' animation.
+      // For convenience, get old bounding rect from background.
+
+      var parentOldBg = lastsForAnimation.background[parentNode.getRawIndex()];
+
+      if (!reRoot && parentOldBg && parentOldBg.old) {
+        parentOldX = parentOldBg.old.width;
+        parentOldY = parentOldBg.old.height;
+      } // When no parent old shape found, its parent is new too,
+      // so we can just use {x:0, y:0}.
+
+
+      lastCfg.old = storageName === 'nodeGroup' ? [0, parentOldY] : {
+        x: parentOldX,
+        y: parentOldY,
+        width: 0,
+        height: 0
+      };
+    } // Fade in, user can be aware that these nodes are new.
+
+
+    lastCfg.fadein = storageName !== 'nodeGroup';
+  }
+} // We can not set all backgroud with the same z, Because the behaviour of
+// drill down and roll up differ background creation sequence from tree
+// hierarchy sequence, which cause that lowser background element overlap
+// upper ones. So we calculate z based on depth.
+// Moreover, we try to shrink down z interval to [0, 1] to avoid that
+// treemap with large z overlaps other components.
+
+
+function calculateZ(depth, zInLevel) {
+  var zb = depth * Z_BASE + zInLevel;
+  return (zb - 1) / zb;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @file Treemap action
+ */
+var noop$1 = function () {};
+
+var actionTypes = ['treemapZoomToNode', 'treemapRender', 'treemapMove'];
+
+for (var i$1 = 0; i$1 < actionTypes.length; i$1++) {
+  registerAction({
+    type: actionTypes[i$1],
+    update: 'updateView'
+  }, noop$1);
+}
+
+registerAction({
+  type: 'treemapRootToNode',
+  update: 'updateView'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'treemap',
+    query: payload
+  }, handleRootToNode);
+
+  function handleRootToNode(model, index) {
+    var types = ['treemapZoomToNode', 'treemapRootToNode'];
+    var targetInfo = retrieveTargetInfo(payload, types, model);
+
+    if (targetInfo) {
+      var originViewRoot = model.getViewRoot();
+
+      if (originViewRoot) {
+        payload.direction = aboveViewRoot(originViewRoot, targetInfo.node) ? 'rollUp' : 'drillDown';
+      }
+
+      model.resetViewRoot(targetInfo.node);
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var each$9 = each$1;
+var isObject$5 = isObject$1;
+var CATEGORY_DEFAULT_VISUAL_INDEX = -1;
+/**
+ * @param {Object} option
+ * @param {string} [option.type] See visualHandlers.
+ * @param {string} [option.mappingMethod] 'linear' or 'piecewise' or 'category' or 'fixed'
+ * @param {Array.<number>=} [option.dataExtent] [minExtent, maxExtent],
+ *                                              required when mappingMethod is 'linear'
+ * @param {Array.<Object>=} [option.pieceList] [
+ *                                             {value: someValue},
+ *                                             {interval: [min1, max1], visual: {...}},
+ *                                             {interval: [min2, max2]}
+ *                                             ],
+ *                                            required when mappingMethod is 'piecewise'.
+ *                                            Visual for only each piece can be specified.
+ * @param {Array.<string|Object>=} [option.categories] ['cate1', 'cate2']
+ *                                            required when mappingMethod is 'category'.
+ *                                            If no option.categories, categories is set
+ *                                            as [0, 1, 2, ...].
+ * @param {boolean} [option.loop=false] Whether loop mapping when mappingMethod is 'category'.
+ * @param {(Array|Object|*)} [option.visual]  Visual data.
+ *                                            when mappingMethod is 'category',
+ *                                            visual data can be array or object
+ *                                            (like: {cate1: '#222', none: '#fff'})
+ *                                            or primary types (which represents
+ *                                            default category visual), otherwise visual
+ *                                            can be array or primary (which will be
+ *                                            normalized to array).
+ *
+ */
+
+var VisualMapping = function (option) {
+  var mappingMethod = option.mappingMethod;
+  var visualType = option.type;
+  /**
+   * @readOnly
+   * @type {Object}
+   */
+
+  var thisOption = this.option = clone(option);
+  /**
+   * @readOnly
+   * @type {string}
+   */
+
+  this.type = visualType;
+  /**
+   * @readOnly
+   * @type {string}
+   */
+
+  this.mappingMethod = mappingMethod;
+  /**
+   * @private
+   * @type {Function}
+   */
+
+  this._normalizeData = normalizers[mappingMethod];
+  var visualHandler = visualHandlers[visualType];
+  /**
+   * @public
+   * @type {Function}
+   */
+
+  this.applyVisual = visualHandler.applyVisual;
+  /**
+   * @public
+   * @type {Function}
+   */
+
+  this.getColorMapper = visualHandler.getColorMapper;
+  /**
+   * @private
+   * @type {Function}
+   */
+
+  this._doMap = visualHandler._doMap[mappingMethod];
+
+  if (mappingMethod === 'piecewise') {
+    normalizeVisualRange(thisOption);
+    preprocessForPiecewise(thisOption);
+  } else if (mappingMethod === 'category') {
+    thisOption.categories ? preprocessForSpecifiedCategory(thisOption) // categories is ordinal when thisOption.categories not specified,
+    // which need no more preprocess except normalize visual.
+    : normalizeVisualRange(thisOption, true);
+  } else {
+    // mappingMethod === 'linear' or 'fixed'
+    assert$1(mappingMethod !== 'linear' || thisOption.dataExtent);
+    normalizeVisualRange(thisOption);
+  }
+};
+
+VisualMapping.prototype = {
+  constructor: VisualMapping,
+  mapValueToVisual: function (value) {
+    var normalized = this._normalizeData(value);
+
+    return this._doMap(normalized, value);
+  },
+  getNormalizer: function () {
+    return bind(this._normalizeData, this);
+  }
+};
+var visualHandlers = VisualMapping.visualHandlers = {
+  color: {
+    applyVisual: makeApplyVisual('color'),
+
+    /**
+     * Create a mapper function
+     * @return {Function}
+     */
+    getColorMapper: function () {
+      var thisOption = this.option;
+      return bind(thisOption.mappingMethod === 'category' ? function (value, isNormalized) {
+        !isNormalized && (value = this._normalizeData(value));
+        return doMapCategory.call(this, value);
+      } : function (value, isNormalized, out) {
+        // If output rgb array
+        // which will be much faster and useful in pixel manipulation
+        var returnRGBArray = !!out;
+        !isNormalized && (value = this._normalizeData(value));
+        out = fastLerp(value, thisOption.parsedVisual, out);
+        return returnRGBArray ? out : stringify(out, 'rgba');
+      }, this);
+    },
+    _doMap: {
+      linear: function (normalized) {
+        return stringify(fastLerp(normalized, this.option.parsedVisual), 'rgba');
+      },
+      category: doMapCategory,
+      piecewise: function (normalized, value) {
+        var result = getSpecifiedVisual.call(this, value);
+
+        if (result == null) {
+          result = stringify(fastLerp(normalized, this.option.parsedVisual), 'rgba');
+        }
+
+        return result;
+      },
+      fixed: doMapFixed
+    }
+  },
+  colorHue: makePartialColorVisualHandler(function (color, value) {
+    return modifyHSL(color, value);
+  }),
+  colorSaturation: makePartialColorVisualHandler(function (color, value) {
+    return modifyHSL(color, null, value);
+  }),
+  colorLightness: makePartialColorVisualHandler(function (color, value) {
+    return modifyHSL(color, null, null, value);
+  }),
+  colorAlpha: makePartialColorVisualHandler(function (color, value) {
+    return modifyAlpha(color, value);
+  }),
+  opacity: {
+    applyVisual: makeApplyVisual('opacity'),
+    _doMap: makeDoMap([0, 1])
+  },
+  liftZ: {
+    applyVisual: makeApplyVisual('liftZ'),
+    _doMap: {
+      linear: doMapFixed,
+      category: doMapFixed,
+      piecewise: doMapFixed,
+      fixed: doMapFixed
+    }
+  },
+  symbol: {
+    applyVisual: function (value, getter, setter) {
+      var symbolCfg = this.mapValueToVisual(value);
+
+      if (isString(symbolCfg)) {
+        setter('symbol', symbolCfg);
+      } else if (isObject$5(symbolCfg)) {
+        for (var name in symbolCfg) {
+          if (symbolCfg.hasOwnProperty(name)) {
+            setter(name, symbolCfg[name]);
+          }
+        }
+      }
+    },
+    _doMap: {
+      linear: doMapToArray,
+      category: doMapCategory,
+      piecewise: function (normalized, value) {
+        var result = getSpecifiedVisual.call(this, value);
+
+        if (result == null) {
+          result = doMapToArray.call(this, normalized);
+        }
+
+        return result;
+      },
+      fixed: doMapFixed
+    }
+  },
+  symbolSize: {
+    applyVisual: makeApplyVisual('symbolSize'),
+    _doMap: makeDoMap([0, 1])
+  }
+};
+
+function preprocessForPiecewise(thisOption) {
+  var pieceList = thisOption.pieceList;
+  thisOption.hasSpecialVisual = false;
+  each$1(pieceList, function (piece, index) {
+    piece.originIndex = index; // piece.visual is "result visual value" but not
+    // a visual range, so it does not need to be normalized.
+
+    if (piece.visual != null) {
+      thisOption.hasSpecialVisual = true;
+    }
+  });
+}
+
+function preprocessForSpecifiedCategory(thisOption) {
+  // Hash categories.
+  var categories = thisOption.categories;
+  var visual = thisOption.visual;
+  var categoryMap = thisOption.categoryMap = {};
+  each$9(categories, function (cate, index) {
+    categoryMap[cate] = index;
+  }); // Process visual map input.
+
+  if (!isArray(visual)) {
+    var visualArr = [];
+
+    if (isObject$1(visual)) {
+      each$9(visual, function (v, cate) {
+        var index = categoryMap[cate];
+        visualArr[index != null ? index : CATEGORY_DEFAULT_VISUAL_INDEX] = v;
+      });
+    } else {
+      // Is primary type, represents default visual.
+      visualArr[CATEGORY_DEFAULT_VISUAL_INDEX] = visual;
+    }
+
+    visual = setVisualToOption(thisOption, visualArr);
+  } // Remove categories that has no visual,
+  // then we can mapping them to CATEGORY_DEFAULT_VISUAL_INDEX.
+
+
+  for (var i = categories.length - 1; i >= 0; i--) {
+    if (visual[i] == null) {
+      delete categoryMap[categories[i]];
+      categories.pop();
+    }
+  }
+}
+
+function normalizeVisualRange(thisOption, isCategory) {
+  var visual = thisOption.visual;
+  var visualArr = [];
+
+  if (isObject$1(visual)) {
+    each$9(visual, function (v) {
+      visualArr.push(v);
+    });
+  } else if (visual != null) {
+    visualArr.push(visual);
+  }
+
+  var doNotNeedPair = {
+    color: 1,
+    symbol: 1
+  };
+
+  if (!isCategory && visualArr.length === 1 && !doNotNeedPair.hasOwnProperty(thisOption.type)) {
+    // Do not care visualArr.length === 0, which is illegal.
+    visualArr[1] = visualArr[0];
+  }
+
+  setVisualToOption(thisOption, visualArr);
+}
+
+function makePartialColorVisualHandler(applyValue) {
+  return {
+    applyVisual: function (value, getter, setter) {
+      value = this.mapValueToVisual(value); // Must not be array value
+
+      setter('color', applyValue(getter('color'), value));
+    },
+    _doMap: makeDoMap([0, 1])
+  };
+}
+
+function doMapToArray(normalized) {
+  var visual = this.option.visual;
+  return visual[Math.round(linearMap(normalized, [0, 1], [0, visual.length - 1], true))] || {};
+}
+
+function makeApplyVisual(visualType) {
+  return function (value, getter, setter) {
+    setter(visualType, this.mapValueToVisual(value));
+  };
+}
+
+function doMapCategory(normalized) {
+  var visual = this.option.visual;
+  return visual[this.option.loop && normalized !== CATEGORY_DEFAULT_VISUAL_INDEX ? normalized % visual.length : normalized];
+}
+
+function doMapFixed() {
+  return this.option.visual[0];
+}
+
+function makeDoMap(sourceExtent) {
+  return {
+    linear: function (normalized) {
+      return linearMap(normalized, sourceExtent, this.option.visual, true);
+    },
+    category: doMapCategory,
+    piecewise: function (normalized, value) {
+      var result = getSpecifiedVisual.call(this, value);
+
+      if (result == null) {
+        result = linearMap(normalized, sourceExtent, this.option.visual, true);
+      }
+
+      return result;
+    },
+    fixed: doMapFixed
+  };
+}
+
+function getSpecifiedVisual(value) {
+  var thisOption = this.option;
+  var pieceList = thisOption.pieceList;
+
+  if (thisOption.hasSpecialVisual) {
+    var pieceIndex = VisualMapping.findPieceIndex(value, pieceList);
+    var piece = pieceList[pieceIndex];
+
+    if (piece && piece.visual) {
+      return piece.visual[this.type];
+    }
+  }
+}
+
+function setVisualToOption(thisOption, visualArr) {
+  thisOption.visual = visualArr;
+
+  if (thisOption.type === 'color') {
+    thisOption.parsedVisual = map(visualArr, function (item) {
+      return parse(item);
+    });
+  }
+
+  return visualArr;
+}
+/**
+ * Normalizers by mapping methods.
+ */
+
+
+var normalizers = {
+  linear: function (value) {
+    return linearMap(value, this.option.dataExtent, [0, 1], true);
+  },
+  piecewise: function (value) {
+    var pieceList = this.option.pieceList;
+    var pieceIndex = VisualMapping.findPieceIndex(value, pieceList, true);
+
+    if (pieceIndex != null) {
+      return linearMap(pieceIndex, [0, pieceList.length - 1], [0, 1], true);
+    }
+  },
+  category: function (value) {
+    var index = this.option.categories ? this.option.categoryMap[value] : value; // ordinal
+
+    return index == null ? CATEGORY_DEFAULT_VISUAL_INDEX : index;
+  },
+  fixed: noop
+};
+/**
+ * List available visual types.
+ *
+ * @public
+ * @return {Array.<string>}
+ */
+
+VisualMapping.listVisualTypes = function () {
+  var visualTypes = [];
+  each$1(visualHandlers, function (handler, key) {
+    visualTypes.push(key);
+  });
+  return visualTypes;
+};
+/**
+ * @public
+ */
+
+
+VisualMapping.addVisualHandler = function (name, handler) {
+  visualHandlers[name] = handler;
+};
+/**
+ * @public
+ */
+
+
+VisualMapping.isValidType = function (visualType) {
+  return visualHandlers.hasOwnProperty(visualType);
+};
+/**
+ * Convinent method.
+ * Visual can be Object or Array or primary type.
+ *
+ * @public
+ */
+
+
+VisualMapping.eachVisual = function (visual, callback, context) {
+  if (isObject$1(visual)) {
+    each$1(visual, callback, context);
+  } else {
+    callback.call(context, visual);
+  }
+};
+
+VisualMapping.mapVisual = function (visual, callback, context) {
+  var isPrimary;
+  var newVisual = isArray(visual) ? [] : isObject$1(visual) ? {} : (isPrimary = true, null);
+  VisualMapping.eachVisual(visual, function (v, key) {
+    var newVal = callback.call(context, v, key);
+    isPrimary ? newVisual = newVal : newVisual[key] = newVal;
+  });
+  return newVisual;
+};
+/**
+ * @public
+ * @param {Object} obj
+ * @return {Object} new object containers visual values.
+ *                 If no visuals, return null.
+ */
+
+
+VisualMapping.retrieveVisuals = function (obj) {
+  var ret = {};
+  var hasVisual;
+  obj && each$9(visualHandlers, function (h, visualType) {
+    if (obj.hasOwnProperty(visualType)) {
+      ret[visualType] = obj[visualType];
+      hasVisual = true;
+    }
+  });
+  return hasVisual ? ret : null;
+};
+/**
+ * Give order to visual types, considering colorSaturation, colorAlpha depends on color.
+ *
+ * @public
+ * @param {(Object|Array)} visualTypes If Object, like: {color: ..., colorSaturation: ...}
+ *                                     IF Array, like: ['color', 'symbol', 'colorSaturation']
+ * @return {Array.<string>} Sorted visual types.
+ */
+
+
+VisualMapping.prepareVisualTypes = function (visualTypes) {
+  if (isObject$5(visualTypes)) {
+    var types = [];
+    each$9(visualTypes, function (item, type) {
+      types.push(type);
+    });
+    visualTypes = types;
+  } else if (isArray(visualTypes)) {
+    visualTypes = visualTypes.slice();
+  } else {
+    return [];
+  }
+
+  visualTypes.sort(function (type1, type2) {
+    // color should be front of colorSaturation, colorAlpha, ...
+    // symbol and symbolSize do not matter.
+    return type2 === 'color' && type1 !== 'color' && type1.indexOf('color') === 0 ? 1 : -1;
+  });
+  return visualTypes;
+};
+/**
+ * 'color', 'colorSaturation', 'colorAlpha', ... are depends on 'color'.
+ * Other visuals are only depends on themself.
+ *
+ * @public
+ * @param {string} visualType1
+ * @param {string} visualType2
+ * @return {boolean}
+ */
+
+
+VisualMapping.dependsOn = function (visualType1, visualType2) {
+  return visualType2 === 'color' ? !!(visualType1 && visualType1.indexOf(visualType2) === 0) : visualType1 === visualType2;
+};
+/**
+ * @param {number} value
+ * @param {Array.<Object>} pieceList [{value: ..., interval: [min, max]}, ...]
+ *                         Always from small to big.
+ * @param {boolean} [findClosestWhenOutside=false]
+ * @return {number} index
+ */
+
+
+VisualMapping.findPieceIndex = function (value, pieceList, findClosestWhenOutside) {
+  var possibleI;
+  var abs = Infinity; // value has the higher priority.
+
+  for (var i = 0, len = pieceList.length; i < len; i++) {
+    var pieceValue = pieceList[i].value;
+
+    if (pieceValue != null) {
+      if (pieceValue === value // FIXME
+      // It is supposed to compare value according to value type of dimension,
+      // but currently value type can exactly be string or number.
+      // Compromise for numeric-like string (like '12'), especially
+      // in the case that visualMap.categories is ['22', '33'].
+      || typeof pieceValue === 'string' && pieceValue === value + '') {
+        return i;
+      }
+
+      findClosestWhenOutside && updatePossible(pieceValue, i);
+    }
+  }
+
+  for (var i = 0, len = pieceList.length; i < len; i++) {
+    var piece = pieceList[i];
+    var interval = piece.interval;
+    var close = piece.close;
+
+    if (interval) {
+      if (interval[0] === -Infinity) {
+        if (littleThan(close[1], value, interval[1])) {
+          return i;
+        }
+      } else if (interval[1] === Infinity) {
+        if (littleThan(close[0], interval[0], value)) {
+          return i;
+        }
+      } else if (littleThan(close[0], interval[0], value) && littleThan(close[1], value, interval[1])) {
+        return i;
+      }
+
+      findClosestWhenOutside && updatePossible(interval[0], i);
+      findClosestWhenOutside && updatePossible(interval[1], i);
+    }
+  }
+
+  if (findClosestWhenOutside) {
+    return value === Infinity ? pieceList.length - 1 : value === -Infinity ? 0 : possibleI;
+  }
+
+  function updatePossible(val, index) {
+    var newAbs = Math.abs(val - value);
+
+    if (newAbs < abs) {
+      abs = newAbs;
+      possibleI = index;
+    }
+  }
+};
+
+function littleThan(close, a, b) {
+  return close ? a <= b : a < b;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var isArray$2 = isArray;
+var ITEM_STYLE_NORMAL = 'itemStyle';
+var treemapVisual = {
+  seriesType: 'treemap',
+  reset: function (seriesModel, ecModel, api, payload) {
+    var tree = seriesModel.getData().tree;
+    var root = tree.root;
+
+    if (root.isRemoved()) {
+      return;
+    }
+
+    travelTree(root, // Visual should calculate from tree root but not view root.
+    {}, seriesModel.getViewRoot().getAncestors(), seriesModel);
+  }
+};
+
+function travelTree(node, designatedVisual, viewRootAncestors, seriesModel) {
+  var nodeModel = node.getModel();
+  var nodeLayout = node.getLayout(); // Optimize
+
+  if (!nodeLayout || nodeLayout.invisible || !nodeLayout.isInView) {
+    return;
+  }
+
+  var nodeItemStyleModel = node.getModel(ITEM_STYLE_NORMAL);
+  var visuals = buildVisuals(nodeItemStyleModel, designatedVisual, seriesModel); // calculate border color
+
+  var borderColor = nodeItemStyleModel.get('borderColor');
+  var borderColorSaturation = nodeItemStyleModel.get('borderColorSaturation');
+  var thisNodeColor;
+
+  if (borderColorSaturation != null) {
+    // For performance, do not always execute 'calculateColor'.
+    thisNodeColor = calculateColor(visuals, node);
+    borderColor = calculateBorderColor(borderColorSaturation, thisNodeColor);
+  }
+
+  node.setVisual('borderColor', borderColor);
+  var viewChildren = node.viewChildren;
+
+  if (!viewChildren || !viewChildren.length) {
+    thisNodeColor = calculateColor(visuals, node); // Apply visual to this node.
+
+    node.setVisual('color', thisNodeColor);
+  } else {
+    var mapping = buildVisualMapping(node, nodeModel, nodeLayout, nodeItemStyleModel, visuals, viewChildren); // Designate visual to children.
+
+    each$1(viewChildren, function (child, index) {
+      // If higher than viewRoot, only ancestors of viewRoot is needed to visit.
+      if (child.depth >= viewRootAncestors.length || child === viewRootAncestors[child.depth]) {
+        var childVisual = mapVisual(nodeModel, visuals, child, index, mapping, seriesModel);
+        travelTree(child, childVisual, viewRootAncestors, seriesModel);
+      }
+    });
+  }
+}
+
+function buildVisuals(nodeItemStyleModel, designatedVisual, seriesModel) {
+  var visuals = extend({}, designatedVisual);
+  var designatedVisualItemStyle = seriesModel.designatedVisualItemStyle;
+  each$1(['color', 'colorAlpha', 'colorSaturation'], function (visualName) {
+    // Priority: thisNode > thisLevel > parentNodeDesignated > seriesModel
+    designatedVisualItemStyle[visualName] = designatedVisual[visualName];
+    var val = nodeItemStyleModel.get(visualName);
+    designatedVisualItemStyle[visualName] = null;
+    val != null && (visuals[visualName] = val);
+  });
+  return visuals;
+}
+
+function calculateColor(visuals) {
+  var color = getValueVisualDefine(visuals, 'color');
+
+  if (color) {
+    var colorAlpha = getValueVisualDefine(visuals, 'colorAlpha');
+    var colorSaturation = getValueVisualDefine(visuals, 'colorSaturation');
+
+    if (colorSaturation) {
+      color = modifyHSL(color, null, null, colorSaturation);
+    }
+
+    if (colorAlpha) {
+      color = modifyAlpha(color, colorAlpha);
+    }
+
+    return color;
+  }
+}
+
+function calculateBorderColor(borderColorSaturation, thisNodeColor) {
+  return thisNodeColor != null ? modifyHSL(thisNodeColor, null, null, borderColorSaturation) : null;
+}
+
+function getValueVisualDefine(visuals, name) {
+  var value = visuals[name];
+
+  if (value != null && value !== 'none') {
+    return value;
+  }
+}
+
+function buildVisualMapping(node, nodeModel, nodeLayout, nodeItemStyleModel, visuals, viewChildren) {
+  if (!viewChildren || !viewChildren.length) {
+    return;
+  }
+
+  var rangeVisual = getRangeVisual(nodeModel, 'color') || visuals.color != null && visuals.color !== 'none' && (getRangeVisual(nodeModel, 'colorAlpha') || getRangeVisual(nodeModel, 'colorSaturation'));
+
+  if (!rangeVisual) {
+    return;
+  }
+
+  var visualMin = nodeModel.get('visualMin');
+  var visualMax = nodeModel.get('visualMax');
+  var dataExtent = nodeLayout.dataExtent.slice();
+  visualMin != null && visualMin < dataExtent[0] && (dataExtent[0] = visualMin);
+  visualMax != null && visualMax > dataExtent[1] && (dataExtent[1] = visualMax);
+  var colorMappingBy = nodeModel.get('colorMappingBy');
+  var opt = {
+    type: rangeVisual.name,
+    dataExtent: dataExtent,
+    visual: rangeVisual.range
+  };
+
+  if (opt.type === 'color' && (colorMappingBy === 'index' || colorMappingBy === 'id')) {
+    opt.mappingMethod = 'category';
+    opt.loop = true; // categories is ordinal, so do not set opt.categories.
+  } else {
+    opt.mappingMethod = 'linear';
+  }
+
+  var mapping = new VisualMapping(opt);
+  mapping.__drColorMappingBy = colorMappingBy;
+  return mapping;
+} // Notice: If we dont have the attribute 'colorRange', but only use
+// attribute 'color' to represent both concepts of 'colorRange' and 'color',
+// (It means 'colorRange' when 'color' is Array, means 'color' when not array),
+// this problem will be encountered:
+// If a level-1 node dont have children, and its siblings has children,
+// and colorRange is set on level-1, then the node can not be colored.
+// So we separate 'colorRange' and 'color' to different attributes.
+
+
+function getRangeVisual(nodeModel, name) {
+  // 'colorRange', 'colorARange', 'colorSRange'.
+  // If not exsits on this node, fetch from levels and series.
+  var range = nodeModel.get(name);
+  return isArray$2(range) && range.length ? {
+    name: name,
+    range: range
+  } : null;
+}
+
+function mapVisual(nodeModel, visuals, child, index, mapping, seriesModel) {
+  var childVisuals = extend({}, visuals);
+
+  if (mapping) {
+    var mappingType = mapping.type;
+    var colorMappingBy = mappingType === 'color' && mapping.__drColorMappingBy;
+    var value = colorMappingBy === 'index' ? index : colorMappingBy === 'id' ? seriesModel.mapIdToIndex(child.getId()) : child.getValue(nodeModel.get('visualDimension'));
+    childVisuals[mappingType] = mapping.mapValueToVisual(value);
+  }
+
+  return childVisuals;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* A third-party license is embeded for some of the code in this file:
+* The treemap layout implementation was originally copied from
+* "d3.js" with some modifications made for this project.
+* (See more details in the comment of the method "squarify" below.)
+* The use of the source code of this file is also subject to the terms
+* and consitions of the license of "d3.js" (BSD-3Clause, see
+* </licenses/LICENSE-d3>).
+*/
+var mathMax$5 = Math.max;
+var mathMin$5 = Math.min;
+var retrieveValue = retrieve;
+var each$10 = each$1;
+var PATH_BORDER_WIDTH = ['itemStyle', 'borderWidth'];
+var PATH_GAP_WIDTH = ['itemStyle', 'gapWidth'];
+var PATH_UPPER_LABEL_SHOW = ['upperLabel', 'show'];
+var PATH_UPPER_LABEL_HEIGHT = ['upperLabel', 'height'];
+/**
+ * @public
+ */
+
+var treemapLayout = {
+  seriesType: 'treemap',
+  reset: function (seriesModel, ecModel, api, payload) {
+    // Layout result in each node:
+    // {x, y, width, height, area, borderWidth}
+    var ecWidth = api.getWidth();
+    var ecHeight = api.getHeight();
+    var seriesOption = seriesModel.option;
+    var layoutInfo = getLayoutRect(seriesModel.getBoxLayoutParams(), {
+      width: api.getWidth(),
+      height: api.getHeight()
+    });
+    var size = seriesOption.size || []; // Compatible with ec2.
+
+    var containerWidth = parsePercent$1(retrieveValue(layoutInfo.width, size[0]), ecWidth);
+    var containerHeight = parsePercent$1(retrieveValue(layoutInfo.height, size[1]), ecHeight); // Fetch payload info.
+
+    var payloadType = payload && payload.type;
+    var types = ['treemapZoomToNode', 'treemapRootToNode'];
+    var targetInfo = retrieveTargetInfo(payload, types, seriesModel);
+    var rootRect = payloadType === 'treemapRender' || payloadType === 'treemapMove' ? payload.rootRect : null;
+    var viewRoot = seriesModel.getViewRoot();
+    var viewAbovePath = getPathToRoot(viewRoot);
+
+    if (payloadType !== 'treemapMove') {
+      var rootSize = payloadType === 'treemapZoomToNode' ? estimateRootSize(seriesModel, targetInfo, viewRoot, containerWidth, containerHeight) : rootRect ? [rootRect.width, rootRect.height] : [containerWidth, containerHeight];
+      var sort = seriesOption.sort;
+
+      if (sort && sort !== 'asc' && sort !== 'desc') {
+        sort = 'desc';
+      }
+
+      var options = {
+        squareRatio: seriesOption.squareRatio,
+        sort: sort,
+        leafDepth: seriesOption.leafDepth
+      }; // layout should be cleared because using updateView but not update.
+
+      viewRoot.hostTree.clearLayouts(); // TODO
+      // optimize: if out of view clip, do not layout.
+      // But take care that if do not render node out of view clip,
+      // how to calculate start po
+
+      var viewRootLayout = {
+        x: 0,
+        y: 0,
+        width: rootSize[0],
+        height: rootSize[1],
+        area: rootSize[0] * rootSize[1]
+      };
+      viewRoot.setLayout(viewRootLayout);
+      squarify(viewRoot, options, false, 0); // Supplement layout.
+
+      var viewRootLayout = viewRoot.getLayout();
+      each$10(viewAbovePath, function (node, index) {
+        var childValue = (viewAbovePath[index + 1] || viewRoot).getValue();
+        node.setLayout(extend({
+          dataExtent: [childValue, childValue],
+          borderWidth: 0,
+          upperHeight: 0
+        }, viewRootLayout));
+      });
+    }
+
+    var treeRoot = seriesModel.getData().tree.root;
+    treeRoot.setLayout(calculateRootPosition(layoutInfo, rootRect, targetInfo), true);
+    seriesModel.setLayoutInfo(layoutInfo); // FIXME
+    // 现在没有clip功能，暂时取ec高宽。
+
+    prunning(treeRoot, // Transform to base element coordinate system.
+    new BoundingRect(-layoutInfo.x, -layoutInfo.y, ecWidth, ecHeight), viewAbovePath, viewRoot, 0);
+  }
+};
+/**
+ * Layout treemap with squarify algorithm.
+ * The original presentation of this algorithm
+ * was made by Mark Bruls, Kees Huizing, and Jarke J. van Wijk
+ * <https://graphics.ethz.ch/teaching/scivis_common/Literature/squarifiedTreeMaps.pdf>.
+ * The implementation of this algorithm was originally copied from "d3.js"
+ * <https://github.com/d3/d3/blob/9cc9a875e636a1dcf36cc1e07bdf77e1ad6e2c74/src/layout/treemap.js>
+ * with some modifications made for this program.
+ * See the license statement at the head of this file.
+ *
+ * @protected
+ * @param {module:echarts/data/Tree~TreeNode} node
+ * @param {Object} options
+ * @param {string} options.sort 'asc' or 'desc'
+ * @param {number} options.squareRatio
+ * @param {boolean} hideChildren
+ * @param {number} depth
+ */
+
+function squarify(node, options, hideChildren, depth) {
+  var width;
+  var height;
+
+  if (node.isRemoved()) {
+    return;
+  }
+
+  var thisLayout = node.getLayout();
+  width = thisLayout.width;
+  height = thisLayout.height; // Considering border and gap
+
+  var nodeModel = node.getModel();
+  var borderWidth = nodeModel.get(PATH_BORDER_WIDTH);
+  var halfGapWidth = nodeModel.get(PATH_GAP_WIDTH) / 2;
+  var upperLabelHeight = getUpperLabelHeight(nodeModel);
+  var upperHeight = Math.max(borderWidth, upperLabelHeight);
+  var layoutOffset = borderWidth - halfGapWidth;
+  var layoutOffsetUpper = upperHeight - halfGapWidth;
+  var nodeModel = node.getModel();
+  node.setLayout({
+    borderWidth: borderWidth,
+    upperHeight: upperHeight,
+    upperLabelHeight: upperLabelHeight
+  }, true);
+  width = mathMax$5(width - 2 * layoutOffset, 0);
+  height = mathMax$5(height - layoutOffset - layoutOffsetUpper, 0);
+  var totalArea = width * height;
+  var viewChildren = initChildren(node, nodeModel, totalArea, options, hideChildren, depth);
+
+  if (!viewChildren.length) {
+    return;
+  }
+
+  var rect = {
+    x: layoutOffset,
+    y: layoutOffsetUpper,
+    width: width,
+    height: height
+  };
+  var rowFixedLength = mathMin$5(width, height);
+  var best = Infinity; // the best row score so far
+
+  var row = [];
+  row.area = 0;
+
+  for (var i = 0, len = viewChildren.length; i < len;) {
+    var child = viewChildren[i];
+    row.push(child);
+    row.area += child.getLayout().area;
+    var score = worst(row, rowFixedLength, options.squareRatio); // continue with this orientation
+
+    if (score <= best) {
+      i++;
+      best = score;
+    } // abort, and try a different orientation
+    else {
+        row.area -= row.pop().getLayout().area;
+        position(row, rowFixedLength, rect, halfGapWidth, false);
+        rowFixedLength = mathMin$5(rect.width, rect.height);
+        row.length = row.area = 0;
+        best = Infinity;
+      }
+  }
+
+  if (row.length) {
+    position(row, rowFixedLength, rect, halfGapWidth, true);
+  }
+
+  if (!hideChildren) {
+    var childrenVisibleMin = nodeModel.get('childrenVisibleMin');
+
+    if (childrenVisibleMin != null && totalArea < childrenVisibleMin) {
+      hideChildren = true;
+    }
+  }
+
+  for (var i = 0, len = viewChildren.length; i < len; i++) {
+    squarify(viewChildren[i], options, hideChildren, depth + 1);
+  }
+}
+/**
+ * Set area to each child, and calculate data extent for visual coding.
+ */
+
+
+function initChildren(node, nodeModel, totalArea, options, hideChildren, depth) {
+  var viewChildren = node.children || [];
+  var orderBy = options.sort;
+  orderBy !== 'asc' && orderBy !== 'desc' && (orderBy = null);
+  var overLeafDepth = options.leafDepth != null && options.leafDepth <= depth; // leafDepth has higher priority.
+
+  if (hideChildren && !overLeafDepth) {
+    return node.viewChildren = [];
+  } // Sort children, order by desc.
+
+
+  viewChildren = filter(viewChildren, function (child) {
+    return !child.isRemoved();
+  });
+  sort$1(viewChildren, orderBy);
+  var info = statistic(nodeModel, viewChildren, orderBy);
+
+  if (info.sum === 0) {
+    return node.viewChildren = [];
+  }
+
+  info.sum = filterByThreshold(nodeModel, totalArea, info.sum, orderBy, viewChildren);
+
+  if (info.sum === 0) {
+    return node.viewChildren = [];
+  } // Set area to each child.
+
+
+  for (var i = 0, len = viewChildren.length; i < len; i++) {
+    var area = viewChildren[i].getValue() / info.sum * totalArea; // Do not use setLayout({...}, true), because it is needed to clear last layout.
+
+    viewChildren[i].setLayout({
+      area: area
+    });
+  }
+
+  if (overLeafDepth) {
+    viewChildren.length && node.setLayout({
+      isLeafRoot: true
+    }, true);
+    viewChildren.length = 0;
+  }
+
+  node.viewChildren = viewChildren;
+  node.setLayout({
+    dataExtent: info.dataExtent
+  }, true);
+  return viewChildren;
+}
+/**
+ * Consider 'visibleMin'. Modify viewChildren and get new sum.
+ */
+
+
+function filterByThreshold(nodeModel, totalArea, sum, orderBy, orderedChildren) {
+  // visibleMin is not supported yet when no option.sort.
+  if (!orderBy) {
+    return sum;
+  }
+
+  var visibleMin = nodeModel.get('visibleMin');
+  var len = orderedChildren.length;
+  var deletePoint = len; // Always travel from little value to big value.
+
+  for (var i = len - 1; i >= 0; i--) {
+    var value = orderedChildren[orderBy === 'asc' ? len - i - 1 : i].getValue();
+
+    if (value / sum * totalArea < visibleMin) {
+      deletePoint = i;
+      sum -= value;
+    }
+  }
+
+  orderBy === 'asc' ? orderedChildren.splice(0, len - deletePoint) : orderedChildren.splice(deletePoint, len - deletePoint);
+  return sum;
+}
+/**
+ * Sort
+ */
+
+
+function sort$1(viewChildren, orderBy) {
+  if (orderBy) {
+    viewChildren.sort(function (a, b) {
+      var diff = orderBy === 'asc' ? a.getValue() - b.getValue() : b.getValue() - a.getValue();
+      return diff === 0 ? orderBy === 'asc' ? a.dataIndex - b.dataIndex : b.dataIndex - a.dataIndex : diff;
+    });
+  }
+
+  return viewChildren;
+}
+/**
+ * Statistic
+ */
+
+
+function statistic(nodeModel, children, orderBy) {
+  // Calculate sum.
+  var sum = 0;
+
+  for (var i = 0, len = children.length; i < len; i++) {
+    sum += children[i].getValue();
+  } // Statistic data extent for latter visual coding.
+  // Notice: data extent should be calculate based on raw children
+  // but not filtered view children, otherwise visual mapping will not
+  // be stable when zoom (where children is filtered by visibleMin).
+
+
+  var dimension = nodeModel.get('visualDimension');
+  var dataExtent; // The same as area dimension.
+
+  if (!children || !children.length) {
+    dataExtent = [NaN, NaN];
+  } else if (dimension === 'value' && orderBy) {
+    dataExtent = [children[children.length - 1].getValue(), children[0].getValue()];
+    orderBy === 'asc' && dataExtent.reverse();
+  } // Other dimension.
+  else {
+      var dataExtent = [Infinity, -Infinity];
+      each$10(children, function (child) {
+        var value = child.getValue(dimension);
+        value < dataExtent[0] && (dataExtent[0] = value);
+        value > dataExtent[1] && (dataExtent[1] = value);
+      });
+    }
+
+  return {
+    sum: sum,
+    dataExtent: dataExtent
+  };
+}
+/**
+ * Computes the score for the specified row,
+ * as the worst aspect ratio.
+ */
+
+
+function worst(row, rowFixedLength, ratio) {
+  var areaMax = 0;
+  var areaMin = Infinity;
+
+  for (var i = 0, area, len = row.length; i < len; i++) {
+    area = row[i].getLayout().area;
+
+    if (area) {
+      area < areaMin && (areaMin = area);
+      area > areaMax && (areaMax = area);
+    }
+  }
+
+  var squareArea = row.area * row.area;
+  var f = rowFixedLength * rowFixedLength * ratio;
+  return squareArea ? mathMax$5(f * areaMax / squareArea, squareArea / (f * areaMin)) : Infinity;
+}
+/**
+ * Positions the specified row of nodes. Modifies `rect`.
+ */
+
+
+function position(row, rowFixedLength, rect, halfGapWidth, flush) {
+  // When rowFixedLength === rect.width,
+  // it is horizontal subdivision,
+  // rowFixedLength is the width of the subdivision,
+  // rowOtherLength is the height of the subdivision,
+  // and nodes will be positioned from left to right.
+  // wh[idx0WhenH] means: when horizontal,
+  //      wh[idx0WhenH] => wh[0] => 'width'.
+  //      xy[idx1WhenH] => xy[1] => 'y'.
+  var idx0WhenH = rowFixedLength === rect.width ? 0 : 1;
+  var idx1WhenH = 1 - idx0WhenH;
+  var xy = ['x', 'y'];
+  var wh = ['width', 'height'];
+  var last = rect[xy[idx0WhenH]];
+  var rowOtherLength = rowFixedLength ? row.area / rowFixedLength : 0;
+
+  if (flush || rowOtherLength > rect[wh[idx1WhenH]]) {
+    rowOtherLength = rect[wh[idx1WhenH]]; // over+underflow
+  }
+
+  for (var i = 0, rowLen = row.length; i < rowLen; i++) {
+    var node = row[i];
+    var nodeLayout = {};
+    var step = rowOtherLength ? node.getLayout().area / rowOtherLength : 0;
+    var wh1 = nodeLayout[wh[idx1WhenH]] = mathMax$5(rowOtherLength - 2 * halfGapWidth, 0); // We use Math.max/min to avoid negative width/height when considering gap width.
+
+    var remain = rect[xy[idx0WhenH]] + rect[wh[idx0WhenH]] - last;
+    var modWH = i === rowLen - 1 || remain < step ? remain : step;
+    var wh0 = nodeLayout[wh[idx0WhenH]] = mathMax$5(modWH - 2 * halfGapWidth, 0);
+    nodeLayout[xy[idx1WhenH]] = rect[xy[idx1WhenH]] + mathMin$5(halfGapWidth, wh1 / 2);
+    nodeLayout[xy[idx0WhenH]] = last + mathMin$5(halfGapWidth, wh0 / 2);
+    last += modWH;
+    node.setLayout(nodeLayout, true);
+  }
+
+  rect[xy[idx1WhenH]] += rowOtherLength;
+  rect[wh[idx1WhenH]] -= rowOtherLength;
+} // Return [containerWidth, containerHeight] as default.
+
+
+function estimateRootSize(seriesModel, targetInfo, viewRoot, containerWidth, containerHeight) {
+  // If targetInfo.node exists, we zoom to the node,
+  // so estimate whold width and heigth by target node.
+  var currNode = (targetInfo || {}).node;
+  var defaultSize = [containerWidth, containerHeight];
+
+  if (!currNode || currNode === viewRoot) {
+    return defaultSize;
+  }
+
+  var parent;
+  var viewArea = containerWidth * containerHeight;
+  var area = viewArea * seriesModel.option.zoomToNodeRatio;
+
+  while (parent = currNode.parentNode) {
+    // jshint ignore:line
+    var sum = 0;
+    var siblings = parent.children;
+
+    for (var i = 0, len = siblings.length; i < len; i++) {
+      sum += siblings[i].getValue();
+    }
+
+    var currNodeValue = currNode.getValue();
+
+    if (currNodeValue === 0) {
+      return defaultSize;
+    }
+
+    area *= sum / currNodeValue; // Considering border, suppose aspect ratio is 1.
+
+    var parentModel = parent.getModel();
+    var borderWidth = parentModel.get(PATH_BORDER_WIDTH);
+    var upperHeight = Math.max(borderWidth, getUpperLabelHeight(parentModel, borderWidth));
+    area += 4 * borderWidth * borderWidth + (3 * borderWidth + upperHeight) * Math.pow(area, 0.5);
+    area > MAX_SAFE_INTEGER && (area = MAX_SAFE_INTEGER);
+    currNode = parent;
+  }
+
+  area < viewArea && (area = viewArea);
+  var scale = Math.pow(area / viewArea, 0.5);
+  return [containerWidth * scale, containerHeight * scale];
+} // Root postion base on coord of containerGroup
+
+
+function calculateRootPosition(layoutInfo, rootRect, targetInfo) {
+  if (rootRect) {
+    return {
+      x: rootRect.x,
+      y: rootRect.y
+    };
+  }
+
+  var defaultPosition = {
+    x: 0,
+    y: 0
+  };
+
+  if (!targetInfo) {
+    return defaultPosition;
+  } // If targetInfo is fetched by 'retrieveTargetInfo',
+  // old tree and new tree are the same tree,
+  // so the node still exists and we can visit it.
+
+
+  var targetNode = targetInfo.node;
+  var layout = targetNode.getLayout();
+
+  if (!layout) {
+    return defaultPosition;
+  } // Transform coord from local to container.
+
+
+  var targetCenter = [layout.width / 2, layout.height / 2];
+  var node = targetNode;
+
+  while (node) {
+    var nodeLayout = node.getLayout();
+    targetCenter[0] += nodeLayout.x;
+    targetCenter[1] += nodeLayout.y;
+    node = node.parentNode;
+  }
+
+  return {
+    x: layoutInfo.width / 2 - targetCenter[0],
+    y: layoutInfo.height / 2 - targetCenter[1]
+  };
+} // Mark nodes visible for prunning when visual coding and rendering.
+// Prunning depends on layout and root position, so we have to do it after layout.
+
+
+function prunning(node, clipRect, viewAbovePath, viewRoot, depth) {
+  var nodeLayout = node.getLayout();
+  var nodeInViewAbovePath = viewAbovePath[depth];
+  var isAboveViewRoot = nodeInViewAbovePath && nodeInViewAbovePath === node;
+
+  if (nodeInViewAbovePath && !isAboveViewRoot || depth === viewAbovePath.length && node !== viewRoot) {
+    return;
+  }
+
+  node.setLayout({
+    // isInView means: viewRoot sub tree + viewAbovePath
+    isInView: true,
+    // invisible only means: outside view clip so that the node can not
+    // see but still layout for animation preparation but not render.
+    invisible: !isAboveViewRoot && !clipRect.intersect(nodeLayout),
+    isAboveViewRoot: isAboveViewRoot
+  }, true); // Transform to child coordinate.
+
+  var childClipRect = new BoundingRect(clipRect.x - nodeLayout.x, clipRect.y - nodeLayout.y, clipRect.width, clipRect.height);
+  each$10(node.viewChildren || [], function (child) {
+    prunning(child, childClipRect, viewAbovePath, viewRoot, depth + 1);
+  });
+}
+
+function getUpperLabelHeight(model) {
+  return model.get(PATH_UPPER_LABEL_SHOW) ? model.get(PATH_UPPER_LABEL_HEIGHT) : 0;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(treemapVisual);
+registerLayout(treemapLayout);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+SeriesModel.extend({
+  type: 'series.sunburst',
+
+  /**
+   * @type {module:echarts/data/Tree~Node}
+   */
+  _viewRoot: null,
+  getInitialData: function (option, ecModel) {
+    // Create a virtual root.
+    var root = {
+      name: option.name,
+      children: option.data
+    };
+    completeTreeValue$1(root);
+    var levelModels = map(option.levels || [], function (levelDefine) {
+      return new Model(levelDefine, this, ecModel);
+    }, this); // Make sure always a new tree is created when setOption,
+    // in TreemapView, we check whether oldTree === newTree
+    // to choose mappings approach among old shapes and new shapes.
+
+    var tree = Tree.createTree(root, this, beforeLink);
+
+    function beforeLink(nodeData) {
+      nodeData.wrapMethod('getItemModel', function (model, idx) {
+        var node = tree.getNodeByDataIndex(idx);
+        var levelModel = levelModels[node.depth];
+        levelModel && (model.parentModel = levelModel);
+        return model;
+      });
+    }
+
+    return tree.data;
+  },
+  optionUpdated: function () {
+    this.resetViewRoot();
+  },
+
+  /*
+   * @override
+   */
+  getDataParams: function (dataIndex) {
+    var params = SeriesModel.prototype.getDataParams.apply(this, arguments);
+    var node = this.getData().tree.getNodeByDataIndex(dataIndex);
+    params.treePathInfo = wrapTreePathInfo(node, this);
+    return params;
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 2,
+    // 默认全局居中
+    center: ['50%', '50%'],
+    radius: [0, '75%'],
+    // 默认顺时针
+    clockwise: true,
+    startAngle: 90,
+    // 最小角度改为0
+    minAngle: 0,
+    percentPrecision: 2,
+    // If still show when all data zero.
+    stillShowZeroSum: true,
+    // Policy of highlighting pieces when hover on one
+    // Valid values: 'none' (for not downplay others), 'descendant',
+    // 'ancestor', 'self'
+    highlightPolicy: 'descendant',
+    // 'rootToNode', 'link', or false
+    nodeClick: 'rootToNode',
+    renderLabelForZeroData: false,
+    label: {
+      // could be: 'radial', 'tangential', or 'none'
+      rotate: 'radial',
+      show: true,
+      opacity: 1,
+      // 'left' is for inner side of inside, and 'right' is for outter
+      // side for inside
+      align: 'center',
+      position: 'inside',
+      distance: 5,
+      silent: true
+    },
+    itemStyle: {
+      borderWidth: 1,
+      borderColor: 'white',
+      borderType: 'solid',
+      shadowBlur: 0,
+      shadowColor: 'rgba(0, 0, 0, 0.2)',
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      opacity: 1
+    },
+    highlight: {
+      itemStyle: {
+        opacity: 1
+      }
+    },
+    downplay: {
+      itemStyle: {
+        opacity: 0.5
+      },
+      label: {
+        opacity: 0.6
+      }
+    },
+    // Animation type canbe expansion, scale
+    animationType: 'expansion',
+    animationDuration: 1000,
+    animationDurationUpdate: 500,
+    animationEasing: 'cubicOut',
+    data: [],
+    levels: [],
+
+    /**
+     * Sort order.
+     *
+     * Valid values: 'desc', 'asc', null, or callback function.
+     * 'desc' and 'asc' for descend and ascendant order;
+     * null for not sorting;
+     * example of callback function:
+     * function(nodeA, nodeB) {
+     *     return nodeA.getValue() - nodeB.getValue();
+     * }
+     */
+    sort: 'desc'
+  },
+  getViewRoot: function () {
+    return this._viewRoot;
+  },
+
+  /**
+   * @param {module:echarts/data/Tree~Node} [viewRoot]
+   */
+  resetViewRoot: function (viewRoot) {
+    viewRoot ? this._viewRoot = viewRoot : viewRoot = this._viewRoot;
+    var root = this.getRawData().tree.root;
+
+    if (!viewRoot || viewRoot !== root && !root.contains(viewRoot)) {
+      this._viewRoot = root;
+    }
+  }
+});
+/**
+ * @param {Object} dataNode
+ */
+
+function completeTreeValue$1(dataNode) {
+  // Postorder travel tree.
+  // If value of none-leaf node is not set,
+  // calculate it by suming up the value of all children.
+  var sum = 0;
+  each$1(dataNode.children, function (child) {
+    completeTreeValue$1(child);
+    var childValue = child.value;
+    isArray(childValue) && (childValue = childValue[0]);
+    sum += childValue;
+  });
+  var thisValue = dataNode.value;
+
+  if (isArray(thisValue)) {
+    thisValue = thisValue[0];
+  }
+
+  if (thisValue == null || isNaN(thisValue)) {
+    thisValue = sum;
+  } // Value should not less than 0.
+
+
+  if (thisValue < 0) {
+    thisValue = 0;
+  }
+
+  isArray(dataNode.value) ? dataNode.value[0] = thisValue : dataNode.value = thisValue;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var NodeHighlightPolicy = {
+  NONE: 'none',
+  // not downplay others
+  DESCENDANT: 'descendant',
+  ANCESTOR: 'ancestor',
+  SELF: 'self'
+};
+var DEFAULT_SECTOR_Z = 2;
+var DEFAULT_TEXT_Z = 4;
+/**
+ * Sunburstce of Sunburst including Sector, Label, LabelLine
+ * @constructor
+ * @extends {module:zrender/graphic/Group}
+ */
+
+function SunburstPiece(node, seriesModel, ecModel) {
+  Group.call(this);
+  var sector = new Sector({
+    z2: DEFAULT_SECTOR_Z
+  });
+  sector.seriesIndex = seriesModel.seriesIndex;
+  var text = new Text({
+    z2: DEFAULT_TEXT_Z,
+    silent: node.getModel('label').get('silent')
+  });
+  this.add(sector);
+  this.add(text);
+  this.updateData(true, node, 'normal', seriesModel, ecModel); // Hover to change label and labelLine
+
+  function onEmphasis() {
+    text.ignore = text.hoverIgnore;
+  }
+
+  function onNormal() {
+    text.ignore = text.normalIgnore;
+  }
+
+  this.on('emphasis', onEmphasis).on('normal', onNormal).on('mouseover', onEmphasis).on('mouseout', onNormal);
+}
+
+var SunburstPieceProto = SunburstPiece.prototype;
+
+SunburstPieceProto.updateData = function (firstCreate, node, state, seriesModel, ecModel) {
+  this.node = node;
+  node.piece = this;
+  seriesModel = seriesModel || this._seriesModel;
+  ecModel = ecModel || this._ecModel;
+  var sector = this.childAt(0);
+  sector.dataIndex = node.dataIndex;
+  var itemModel = node.getModel();
+  var layout = node.getLayout(); // if (!layout) {
+  //     console.log(node.getLayout());
+  // }
+
+  var sectorShape = extend({}, layout);
+  sectorShape.label = null;
+  var visualColor = getNodeColor(node, seriesModel, ecModel);
+  fillDefaultColor(node, seriesModel, visualColor);
+  var normalStyle = itemModel.getModel('itemStyle').getItemStyle();
+  var style;
+
+  if (state === 'normal') {
+    style = normalStyle;
+  } else {
+    var stateStyle = itemModel.getModel(state + '.itemStyle').getItemStyle();
+    style = merge(stateStyle, normalStyle);
+  }
+
+  style = defaults({
+    lineJoin: 'bevel',
+    fill: style.fill || visualColor
+  }, style);
+
+  if (firstCreate) {
+    sector.setShape(sectorShape);
+    sector.shape.r = layout.r0;
+    updateProps(sector, {
+      shape: {
+        r: layout.r
+      }
+    }, seriesModel, node.dataIndex);
+    sector.useStyle(style);
+  } else if (typeof style.fill === 'object' && style.fill.type || typeof sector.style.fill === 'object' && sector.style.fill.type) {
+    // Disable animation for gradient since no interpolation method
+    // is supported for gradient
+    updateProps(sector, {
+      shape: sectorShape
+    }, seriesModel);
+    sector.useStyle(style);
+  } else {
+    updateProps(sector, {
+      shape: sectorShape,
+      style: style
+    }, seriesModel);
+  }
+
+  this._updateLabel(seriesModel, visualColor, state);
+
+  var cursorStyle = itemModel.getShallow('cursor');
+  cursorStyle && sector.attr('cursor', cursorStyle);
+
+  if (firstCreate) {
+    var highlightPolicy = seriesModel.getShallow('highlightPolicy');
+
+    this._initEvents(sector, node, seriesModel, highlightPolicy);
+  }
+
+  this._seriesModel = seriesModel || this._seriesModel;
+  this._ecModel = ecModel || this._ecModel;
+  setHoverStyle(this);
+};
+
+SunburstPieceProto.onEmphasis = function (highlightPolicy) {
+  var that = this;
+  this.node.hostTree.root.eachNode(function (n) {
+    if (n.piece) {
+      if (that.node === n) {
+        n.piece.updateData(false, n, 'emphasis');
+      } else if (isNodeHighlighted(n, that.node, highlightPolicy)) {
+        n.piece.childAt(0).trigger('highlight');
+      } else if (highlightPolicy !== NodeHighlightPolicy.NONE) {
+        n.piece.childAt(0).trigger('downplay');
+      }
+    }
+  });
+};
+
+SunburstPieceProto.onNormal = function () {
+  this.node.hostTree.root.eachNode(function (n) {
+    if (n.piece) {
+      n.piece.updateData(false, n, 'normal');
+    }
+  });
+};
+
+SunburstPieceProto.onHighlight = function () {
+  this.updateData(false, this.node, 'highlight');
+};
+
+SunburstPieceProto.onDownplay = function () {
+  this.updateData(false, this.node, 'downplay');
+};
+
+SunburstPieceProto._updateLabel = function (seriesModel, visualColor, state) {
+  var itemModel = this.node.getModel();
+  var normalModel = itemModel.getModel('label');
+  var labelModel = state === 'normal' || state === 'emphasis' ? normalModel : itemModel.getModel(state + '.label');
+  var labelHoverModel = itemModel.getModel('emphasis.label');
+  var labelFormatter = labelModel.get('formatter'); // Use normal formatter if no state formatter is defined
+
+  var labelState = labelFormatter ? state : 'normal';
+  var text = retrieve(seriesModel.getFormattedLabel(this.node.dataIndex, labelState, null, null, 'label'), this.node.name);
+
+  if (getLabelAttr('show') === false) {
+    text = '';
+  }
+
+  var layout = this.node.getLayout();
+  var labelMinAngle = labelModel.get('minAngle');
+
+  if (labelMinAngle == null) {
+    labelMinAngle = normalModel.get('minAngle');
+  }
+
+  labelMinAngle = labelMinAngle / 180 * Math.PI;
+  var angle = layout.endAngle - layout.startAngle;
+
+  if (labelMinAngle != null && Math.abs(angle) < labelMinAngle) {
+    // Not displaying text when angle is too small
+    text = '';
+  }
+
+  var label = this.childAt(1);
+  setLabelStyle(label.style, label.hoverStyle || {}, normalModel, labelHoverModel, {
+    defaultText: labelModel.getShallow('show') ? text : null,
+    autoColor: visualColor,
+    useInsideStyle: true
+  });
+  var midAngle = (layout.startAngle + layout.endAngle) / 2;
+  var dx = Math.cos(midAngle);
+  var dy = Math.sin(midAngle);
+  var r;
+  var labelPosition = getLabelAttr('position');
+  var labelPadding = getLabelAttr('distance') || 0;
+  var textAlign = getLabelAttr('align');
+
+  if (labelPosition === 'outside') {
+    r = layout.r + labelPadding;
+    textAlign = midAngle > Math.PI / 2 ? 'right' : 'left';
+  } else {
+    if (!textAlign || textAlign === 'center') {
+      r = (layout.r + layout.r0) / 2;
+      textAlign = 'center';
+    } else if (textAlign === 'left') {
+      r = layout.r0 + labelPadding;
+
+      if (midAngle > Math.PI / 2) {
+        textAlign = 'right';
+      }
+    } else if (textAlign === 'right') {
+      r = layout.r - labelPadding;
+
+      if (midAngle > Math.PI / 2) {
+        textAlign = 'left';
+      }
+    }
+  }
+
+  label.attr('style', {
+    text: text,
+    textAlign: textAlign,
+    textVerticalAlign: getLabelAttr('verticalAlign') || 'middle',
+    opacity: getLabelAttr('opacity')
+  });
+  var textX = r * dx + layout.cx;
+  var textY = r * dy + layout.cy;
+  label.attr('position', [textX, textY]);
+  var rotateType = getLabelAttr('rotate');
+  var rotate = 0;
+
+  if (rotateType === 'radial') {
+    rotate = -midAngle;
+
+    if (rotate < -Math.PI / 2) {
+      rotate += Math.PI;
+    }
+  } else if (rotateType === 'tangential') {
+    rotate = Math.PI / 2 - midAngle;
+
+    if (rotate > Math.PI / 2) {
+      rotate -= Math.PI;
+    } else if (rotate < -Math.PI / 2) {
+      rotate += Math.PI;
+    }
+  } else if (typeof rotateType === 'number') {
+    rotate = rotateType * Math.PI / 180;
+  }
+
+  label.attr('rotation', rotate);
+
+  function getLabelAttr(name) {
+    var stateAttr = labelModel.get(name);
+
+    if (stateAttr == null) {
+      return normalModel.get(name);
+    } else {
+      return stateAttr;
+    }
+  }
+};
+
+SunburstPieceProto._initEvents = function (sector, node, seriesModel, highlightPolicy) {
+  sector.off('mouseover').off('mouseout').off('emphasis').off('normal');
+  var that = this;
+
+  var onEmphasis = function () {
+    that.onEmphasis(highlightPolicy);
+  };
+
+  var onNormal = function () {
+    that.onNormal();
+  };
+
+  var onDownplay = function () {
+    that.onDownplay();
+  };
+
+  var onHighlight = function () {
+    that.onHighlight();
+  };
+
+  if (seriesModel.isAnimationEnabled()) {
+    sector.on('mouseover', onEmphasis).on('mouseout', onNormal).on('emphasis', onEmphasis).on('normal', onNormal).on('downplay', onDownplay).on('highlight', onHighlight);
+  }
+};
+
+inherits(SunburstPiece, Group);
+/**
+ * Get node color
+ *
+ * @param {TreeNode} node the node to get color
+ * @param {module:echarts/model/Series} seriesModel series
+ * @param {module:echarts/model/Global} ecModel echarts defaults
+ */
+
+function getNodeColor(node, seriesModel, ecModel) {
+  // Color from visualMap
+  var visualColor = node.getVisual('color');
+  var visualMetaList = node.getVisual('visualMeta');
+
+  if (!visualMetaList || visualMetaList.length === 0) {
+    // Use first-generation color if has no visualMap
+    visualColor = null;
+  } // Self color or level color
+
+
+  var color = node.getModel('itemStyle').get('color');
+
+  if (color) {
+    return color;
+  } else if (visualColor) {
+    // Color mapping
+    return visualColor;
+  } else if (node.depth === 0) {
+    // Virtual root node
+    return ecModel.option.color[0];
+  } else {
+    // First-generation color
+    var length = ecModel.option.color.length;
+    color = ecModel.option.color[getRootId(node) % length];
+  }
+
+  return color;
+}
+/**
+ * Get index of root in sorted order
+ *
+ * @param {TreeNode} node current node
+ * @return {number} index in root
+ */
+
+
+function getRootId(node) {
+  var ancestor = node;
+
+  while (ancestor.depth > 1) {
+    ancestor = ancestor.parentNode;
+  }
+
+  var virtualRoot = node.getAncestors()[0];
+  return indexOf(virtualRoot.children, ancestor);
+}
+
+function isNodeHighlighted(node, activeNode, policy) {
+  if (policy === NodeHighlightPolicy.NONE) {
+    return false;
+  } else if (policy === NodeHighlightPolicy.SELF) {
+    return node === activeNode;
+  } else if (policy === NodeHighlightPolicy.ANCESTOR) {
+    return node === activeNode || node.isAncestorOf(activeNode);
+  } else {
+    return node === activeNode || node.isDescendantOf(activeNode);
+  }
+} // Fix tooltip callback function params.color incorrect when pick a default color
+
+
+function fillDefaultColor(node, seriesModel, color) {
+  var data = seriesModel.getData();
+  data.setItemVisual(node.dataIndex, 'color', color);
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var ROOT_TO_NODE_ACTION = 'sunburstRootToNode';
+var SunburstView = Chart.extend({
+  type: 'sunburst',
+  init: function () {},
+  render: function (seriesModel, ecModel, api, payload) {
+    var that = this;
+    this.seriesModel = seriesModel;
+    this.api = api;
+    this.ecModel = ecModel;
+    var data = seriesModel.getData();
+    var virtualRoot = data.tree.root;
+    var newRoot = seriesModel.getViewRoot();
+    var group = this.group;
+    var renderLabelForZeroData = seriesModel.get('renderLabelForZeroData');
+    var newChildren = [];
+    newRoot.eachNode(function (node) {
+      newChildren.push(node);
+    });
+    var oldChildren = this._oldChildren || [];
+    dualTravel(newChildren, oldChildren);
+    renderRollUp(virtualRoot, newRoot);
+
+    if (payload && payload.highlight && payload.highlight.piece) {
+      var highlightPolicy = seriesModel.getShallow('highlightPolicy');
+      payload.highlight.piece.onEmphasis(highlightPolicy);
+    } else if (payload && payload.unhighlight) {
+      var piece = this.virtualPiece;
+
+      if (!piece && virtualRoot.children.length) {
+        piece = virtualRoot.children[0].piece;
+      }
+
+      if (piece) {
+        piece.onNormal();
+      }
+    }
+
+    this._initEvents();
+
+    this._oldChildren = newChildren;
+
+    function dualTravel(newChildren, oldChildren) {
+      if (newChildren.length === 0 && oldChildren.length === 0) {
+        return;
+      }
+
+      new DataDiffer(oldChildren, newChildren, getKey, getKey).add(processNode).update(processNode).remove(curry(processNode, null)).execute();
+
+      function getKey(node) {
+        return node.getId();
+      }
+
+      function processNode(newId, oldId) {
+        var newNode = newId == null ? null : newChildren[newId];
+        var oldNode = oldId == null ? null : oldChildren[oldId];
+        doRenderNode(newNode, oldNode);
+      }
+    }
+
+    function doRenderNode(newNode, oldNode) {
+      if (!renderLabelForZeroData && newNode && !newNode.getValue()) {
+        // Not render data with value 0
+        newNode = null;
+      }
+
+      if (newNode !== virtualRoot && oldNode !== virtualRoot) {
+        if (oldNode && oldNode.piece) {
+          if (newNode) {
+            // Update
+            oldNode.piece.updateData(false, newNode, 'normal', seriesModel, ecModel); // For tooltip
+
+            data.setItemGraphicEl(newNode.dataIndex, oldNode.piece);
+          } else {
+            // Remove
+            removeNode(oldNode);
+          }
+        } else if (newNode) {
+          // Add
+          var piece = new SunburstPiece(newNode, seriesModel, ecModel);
+          group.add(piece); // For tooltip
+
+          data.setItemGraphicEl(newNode.dataIndex, piece);
+        }
+      }
+    }
+
+    function removeNode(node) {
+      if (!node) {
+        return;
+      }
+
+      if (node.piece) {
+        group.remove(node.piece);
+        node.piece = null;
+      }
+    }
+
+    function renderRollUp(virtualRoot, viewRoot) {
+      if (viewRoot.depth > 0) {
+        // Render
+        if (that.virtualPiece) {
+          // Update
+          that.virtualPiece.updateData(false, virtualRoot, 'normal', seriesModel, ecModel);
+        } else {
+          // Add
+          that.virtualPiece = new SunburstPiece(virtualRoot, seriesModel, ecModel);
+          group.add(that.virtualPiece);
+        }
+
+        if (viewRoot.piece._onclickEvent) {
+          viewRoot.piece.off('click', viewRoot.piece._onclickEvent);
+        }
+
+        var event = function (e) {
+          that._rootToNode(viewRoot.parentNode);
+        };
+
+        viewRoot.piece._onclickEvent = event;
+        that.virtualPiece.on('click', event);
+      } else if (that.virtualPiece) {
+        // Remove
+        group.remove(that.virtualPiece);
+        that.virtualPiece = null;
+      }
+    }
+  },
+  dispose: function () {},
+
+  /**
+   * @private
+   */
+  _initEvents: function () {
+    var that = this;
+
+    var event = function (e) {
+      var targetFound = false;
+      var viewRoot = that.seriesModel.getViewRoot();
+      viewRoot.eachNode(function (node) {
+        if (!targetFound && node.piece && node.piece.childAt(0) === e.target) {
+          var nodeClick = node.getModel().get('nodeClick');
+
+          if (nodeClick === 'rootToNode') {
+            that._rootToNode(node);
+          } else if (nodeClick === 'link') {
+            var itemModel = node.getModel();
+            var link = itemModel.get('link');
+
+            if (link) {
+              var linkTarget = itemModel.get('target', true) || '_blank';
+              windowOpen(link, linkTarget);
+            }
+          }
+
+          targetFound = true;
+        }
+      });
+    };
+
+    if (this.group._onclickEvent) {
+      this.group.off('click', this.group._onclickEvent);
+    }
+
+    this.group.on('click', event);
+    this.group._onclickEvent = event;
+  },
+
+  /**
+   * @private
+   */
+  _rootToNode: function (node) {
+    if (node !== this.seriesModel.getViewRoot()) {
+      this.api.dispatchAction({
+        type: ROOT_TO_NODE_ACTION,
+        from: this.uid,
+        seriesId: this.seriesModel.id,
+        targetNode: node
+      });
+    }
+  },
+
+  /**
+   * @implement
+   */
+  containPoint: function (point, seriesModel) {
+    var treeRoot = seriesModel.getData();
+    var itemLayout = treeRoot.getItemLayout(0);
+
+    if (itemLayout) {
+      var dx = point[0] - itemLayout.cx;
+      var dy = point[1] - itemLayout.cy;
+      var radius = Math.sqrt(dx * dx + dy * dy);
+      return radius <= itemLayout.r && radius >= itemLayout.r0;
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @file Sunburst action
+ */
+var ROOT_TO_NODE_ACTION$1 = 'sunburstRootToNode';
+registerAction({
+  type: ROOT_TO_NODE_ACTION$1,
+  update: 'updateView'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'sunburst',
+    query: payload
+  }, handleRootToNode);
+
+  function handleRootToNode(model, index) {
+    var targetInfo = retrieveTargetInfo(payload, [ROOT_TO_NODE_ACTION$1], model);
+
+    if (targetInfo) {
+      var originViewRoot = model.getViewRoot();
+
+      if (originViewRoot) {
+        payload.direction = aboveViewRoot(originViewRoot, targetInfo.node) ? 'rollUp' : 'drillDown';
+      }
+
+      model.resetViewRoot(targetInfo.node);
+    }
+  }
+});
+var HIGHLIGHT_ACTION = 'sunburstHighlight';
+registerAction({
+  type: HIGHLIGHT_ACTION,
+  update: 'updateView'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'sunburst',
+    query: payload
+  }, handleHighlight);
+
+  function handleHighlight(model, index) {
+    var targetInfo = retrieveTargetInfo(payload, [HIGHLIGHT_ACTION], model);
+
+    if (targetInfo) {
+      payload.highlight = targetInfo.node;
+    }
+  }
+});
+var UNHIGHLIGHT_ACTION = 'sunburstUnhighlight';
+registerAction({
+  type: UNHIGHLIGHT_ACTION,
+  update: 'updateView'
+}, function (payload, ecModel) {
+  ecModel.eachComponent({
+    mainType: 'series',
+    subType: 'sunburst',
+    query: payload
+  }, handleUnhighlight);
+
+  function handleUnhighlight(model, index) {
+    payload.unhighlight = true;
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var RADIAN$2 = Math.PI / 180;
+var sunburstLayout = function (seriesType, ecModel, api, payload) {
+  ecModel.eachSeriesByType(seriesType, function (seriesModel) {
+    var center = seriesModel.get('center');
+    var radius = seriesModel.get('radius');
+
+    if (!isArray(radius)) {
+      radius = [0, radius];
+    }
+
+    if (!isArray(center)) {
+      center = [center, center];
+    }
+
+    var width = api.getWidth();
+    var height = api.getHeight();
+    var size = Math.min(width, height);
+    var cx = parsePercent$1(center[0], width);
+    var cy = parsePercent$1(center[1], height);
+    var r0 = parsePercent$1(radius[0], size / 2);
+    var r = parsePercent$1(radius[1], size / 2);
+    var startAngle = -seriesModel.get('startAngle') * RADIAN$2;
+    var minAngle = seriesModel.get('minAngle') * RADIAN$2;
+    var virtualRoot = seriesModel.getData().tree.root;
+    var treeRoot = seriesModel.getViewRoot();
+    var rootDepth = treeRoot.depth;
+    var sort = seriesModel.get('sort');
+
+    if (sort != null) {
+      initChildren$1(treeRoot, sort);
+    }
+
+    var validDataCount = 0;
+    each$1(treeRoot.children, function (child) {
+      !isNaN(child.getValue()) && validDataCount++;
+    });
+    var sum = treeRoot.getValue(); // Sum may be 0
+
+    var unitRadian = Math.PI / (sum || validDataCount) * 2;
+    var renderRollupNode = treeRoot.depth > 0;
+    var levels = treeRoot.height - (renderRollupNode ? -1 : 1);
+    var rPerLevel = (r - r0) / (levels || 1);
+    var clockwise = seriesModel.get('clockwise');
+    var stillShowZeroSum = seriesModel.get('stillShowZeroSum'); // In the case some sector angle is smaller than minAngle
+    // var restAngle = PI2;
+    // var valueSumLargerThanMinAngle = 0;
+
+    var dir = clockwise ? 1 : -1;
+    /**
+     * Render a tree
+     * @return increased angle
+     */
+
+    var renderNode = function (node, startAngle) {
+      if (!node) {
+        return;
+      }
+
+      var endAngle = startAngle; // Render self
+
+      if (node !== virtualRoot) {
+        // Tree node is virtual, so it doesn't need to be drawn
+        var value = node.getValue();
+        var angle = sum === 0 && stillShowZeroSum ? unitRadian : value * unitRadian;
+
+        if (angle < minAngle) {
+          angle = minAngle; // restAngle -= minAngle;
+        } // else {
+        //     valueSumLargerThanMinAngle += value;
+        // }
+
+
+        endAngle = startAngle + dir * angle;
+        var depth = node.depth - rootDepth - (renderRollupNode ? -1 : 1);
+        var rStart = r0 + rPerLevel * depth;
+        var rEnd = r0 + rPerLevel * (depth + 1);
+        var itemModel = node.getModel();
+
+        if (itemModel.get('r0') != null) {
+          rStart = parsePercent$1(itemModel.get('r0'), size / 2);
+        }
+
+        if (itemModel.get('r') != null) {
+          rEnd = parsePercent$1(itemModel.get('r'), size / 2);
+        }
+
+        node.setLayout({
+          angle: angle,
+          startAngle: startAngle,
+          endAngle: endAngle,
+          clockwise: clockwise,
+          cx: cx,
+          cy: cy,
+          r0: rStart,
+          r: rEnd
+        });
+      } // Render children
+
+
+      if (node.children && node.children.length) {
+        // currentAngle = startAngle;
+        var siblingAngle = 0;
+        each$1(node.children, function (node) {
+          siblingAngle += renderNode(node, startAngle + siblingAngle);
+        });
+      }
+
+      return endAngle - startAngle;
+    }; // Virtual root node for roll up
+
+
+    if (renderRollupNode) {
+      var rStart = r0;
+      var rEnd = r0 + rPerLevel;
+      var angle = Math.PI * 2;
+      virtualRoot.setLayout({
+        angle: angle,
+        startAngle: startAngle,
+        endAngle: startAngle + angle,
+        clockwise: clockwise,
+        cx: cx,
+        cy: cy,
+        r0: rStart,
+        r: rEnd
+      });
+    }
+
+    renderNode(treeRoot, startAngle);
+  });
+};
+/**
+ * Init node children by order and update visual
+ *
+ * @param {TreeNode} node  root node
+ * @param {boolean}  isAsc if is in ascendant order
+ */
+
+function initChildren$1(node, isAsc) {
+  var children = node.children || [];
+  node.children = sort$2(children, isAsc); // Init children recursively
+
+  if (children.length) {
+    each$1(node.children, function (child) {
+      initChildren$1(child, isAsc);
+    });
+  }
+}
+/**
+ * Sort children nodes
+ *
+ * @param {TreeNode[]}               children children of node to be sorted
+ * @param {string | function | null} sort sort method
+ *                                   See SunburstSeries.js for details.
+ */
+
+
+function sort$2(children, sortOrder) {
+  if (typeof sortOrder === 'function') {
+    return children.sort(sortOrder);
+  } else {
+    var isAsc = sortOrder === 'asc';
+    return children.sort(function (a, b) {
+      var diff = (a.getValue() - b.getValue()) * (isAsc ? 1 : -1);
+      return diff === 0 ? (a.dataIndex - b.dataIndex) * (isAsc ? -1 : 1) : diff;
+    });
+  }
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(curry(dataColor, 'sunburst'));
+registerLayout(curry(sunburstLayout, 'sunburst'));
+registerProcessor(curry(dataFilter, 'sunburst'));
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// Fix for 南海诸岛
+var geoCoord = [126, 25];
+var points$1 = [[[0, 3.5], [7, 11.2], [15, 11.9], [30, 7], [42, 0.7], [52, 0.7], [56, 7.7], [59, 0.7], [64, 0.7], [64, 0], [5, 0], [0, 3.5]], [[13, 16.1], [19, 14.7], [16, 21.7], [11, 23.1], [13, 16.1]], [[12, 32.2], [14, 38.5], [15, 38.5], [13, 32.2], [12, 32.2]], [[16, 47.6], [12, 53.2], [13, 53.2], [18, 47.6], [16, 47.6]], [[6, 64.4], [8, 70], [9, 70], [8, 64.4], [6, 64.4]], [[23, 82.6], [29, 79.8], [30, 79.8], [25, 82.6], [23, 82.6]], [[37, 70.7], [43, 62.3], [44, 62.3], [39, 70.7], [37, 70.7]], [[48, 51.1], [51, 45.5], [53, 45.5], [50, 51.1], [48, 51.1]], [[51, 35], [51, 28.7], [53, 28.7], [53, 35], [51, 35]], [[52, 22.4], [55, 17.5], [56, 17.5], [53, 22.4], [52, 22.4]], [[58, 12.6], [62, 7], [63, 7], [60, 12.6], [58, 12.6]], [[0, 3.5], [0, 93.1], [64, 93.1], [64, 0], [63, 0], [63, 92.4], [1, 92.4], [1, 3.5], [0, 3.5]]];
+
+for (var i$2 = 0; i$2 < points$1.length; i$2++) {
+  for (var k = 0; k < points$1[i$2].length; k++) {
+    points$1[i$2][k][0] /= 10.5;
+    points$1[i$2][k][1] /= -10.5 / 0.75;
+    points$1[i$2][k][0] += geoCoord[0];
+    points$1[i$2][k][1] += geoCoord[1];
+  }
+}
+
+var fixNanhai = function (mapType, regions) {
+  if (mapType === 'china') {
+    regions.push(new Region('南海诸岛', map(points$1, function (exterior) {
+      return {
+        type: 'polygon',
+        exterior: exterior
+      };
+    }), geoCoord));
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var coordsOffsetMap = {
+  '南海诸岛': [32, 80],
+  // 全国
+  '广东': [0, -10],
+  '香港': [10, 5],
+  '澳门': [-10, 10],
+  //'北京': [-10, 0],
+  '天津': [5, 5]
+};
+var fixTextCoord = function (mapType, region) {
+  if (mapType === 'china') {
+    var coordFix = coordsOffsetMap[region.name];
+
+    if (coordFix) {
+      var cp = region.center;
+      cp[0] += coordFix[0] / 10.5;
+      cp[1] += -coordFix[1] / (10.5 / 0.75);
+    }
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var geoCoordMap = {
+  'Russia': [100, 60],
+  'United States': [-99, 38],
+  'United States of America': [-99, 38]
+};
+var fixGeoCoord = function (mapType, region) {
+  if (mapType === 'world') {
+    var geoCoord = geoCoordMap[region.name];
+
+    if (geoCoord) {
+      var cp = region.center;
+      cp[0] = geoCoord[0];
+      cp[1] = geoCoord[1];
+    }
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// Fix for 钓鱼岛
+// var Region = require('../Region');
+// var zrUtil = require('zrender/src/core/util');
+// var geoCoord = [126, 25];
+var points$2 = [[[123.45165252685547, 25.73527164402261], [123.49731445312499, 25.73527164402261], [123.49731445312499, 25.750734064600884], [123.45165252685547, 25.750734064600884], [123.45165252685547, 25.73527164402261]]];
+var fixDiaoyuIsland = function (mapType, region) {
+  if (mapType === 'china' && region.name === '台湾') {
+    region.geometries.push({
+      type: 'polygon',
+      exterior: points$2[0]
+    });
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var inner$7 = makeInner();
+var geoJSONLoader = {
+  /**
+   * @param {string} mapName
+   * @param {Object} mapRecord {specialAreas, geoJSON}
+   * @param {string} nameProperty
+   * @return {Object} {regions, boundingRect}
+   */
+  load: function (mapName, mapRecord, nameProperty) {
+    var parsed = inner$7(mapRecord).parsed;
+
+    if (parsed) {
+      return parsed;
+    }
+
+    var specialAreas = mapRecord.specialAreas || {};
+    var geoJSON = mapRecord.geoJSON;
+    var regions; // https://jsperf.com/try-catch-performance-overhead
+
+    try {
+      regions = geoJSON ? parseGeoJson$1(geoJSON, nameProperty) : [];
+    } catch (e) {
+      throw new Error('Invalid geoJson format\n' + e.message);
+    }
+
+    fixNanhai(mapName, regions);
+    each$1(regions, function (region) {
+      var regionName = region.name;
+      fixTextCoord(mapName, region);
+      fixGeoCoord(mapName, region);
+      fixDiaoyuIsland(mapName, region); // Some area like Alaska in USA map needs to be tansformed
+      // to look better
+
+      var specialArea = specialAreas[regionName];
+
+      if (specialArea) {
+        region.transformTo(specialArea.left, specialArea.top, specialArea.width, specialArea.height);
+      }
+    });
+    return inner$7(mapRecord).parsed = {
+      regions: regions,
+      boundingRect: getBoundingRect$1(regions)
+    };
+  }
+};
+
+function getBoundingRect$1(regions) {
+  var rect;
+
+  for (var i = 0; i < regions.length; i++) {
+    var regionRect = regions[i].getBoundingRect();
+    rect = rect || regionRect.clone();
+    rect.union(regionRect);
+  }
+
+  return rect;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var inner$8 = makeInner();
+var geoSVGLoader = {
+  /**
+   * @param {string} mapName
+   * @param {Object} mapRecord {specialAreas, geoJSON}
+   * @return {Object} {root, boundingRect}
+   */
+  load: function (mapName, mapRecord) {
+    var originRoot = inner$8(mapRecord).originRoot;
+
+    if (originRoot) {
+      return {
+        root: originRoot,
+        boundingRect: inner$8(mapRecord).boundingRect
+      };
+    }
+
+    var graphic = buildGraphic(mapRecord);
+    inner$8(mapRecord).originRoot = graphic.root;
+    inner$8(mapRecord).boundingRect = graphic.boundingRect;
+    return graphic;
+  },
+  makeGraphic: function (mapName, mapRecord, hostKey) {
+    // For performance consideration (in large SVG), graphic only maked
+    // when necessary and reuse them according to hostKey.
+    var field = inner$8(mapRecord);
+    var rootMap = field.rootMap || (field.rootMap = createHashMap());
+    var root = rootMap.get(hostKey);
+
+    if (root) {
+      return root;
+    }
+
+    var originRoot = field.originRoot;
+    var boundingRect = field.boundingRect; // For performance, if originRoot is not used by a view,
+    // assign it to a view, but not reproduce graphic elements.
+
+    if (!field.originRootHostKey) {
+      field.originRootHostKey = hostKey;
+      root = originRoot;
+    } else {
+      root = buildGraphic(mapRecord, boundingRect).root;
+    }
+
+    return rootMap.set(hostKey, root);
+  },
+  removeGraphic: function (mapName, mapRecord, hostKey) {
+    var field = inner$8(mapRecord);
+    var rootMap = field.rootMap;
+    rootMap && rootMap.removeKey(hostKey);
+
+    if (hostKey === field.originRootHostKey) {
+      field.originRootHostKey = null;
+    }
+  }
+};
+
+function buildGraphic(mapRecord, boundingRect) {
+  var svgXML = mapRecord.svgXML;
+  var result;
+  var root;
+
+  try {
+    result = svgXML && parseSVG(svgXML, {
+      ignoreViewBox: true,
+      ignoreRootClip: true
+    }) || {};
+    root = result.root;
+    assert$1(root != null);
+  } catch (e) {
+    throw new Error('Invalid svg format\n' + e.message);
+  }
+
+  var svgWidth = result.width;
+  var svgHeight = result.height;
+  var viewBoxRect = result.viewBoxRect;
+
+  if (!boundingRect) {
+    boundingRect = svgWidth == null || svgHeight == null ? // If svg width / height not specified, calculate
+    // bounding rect as the width / height
+    root.getBoundingRect() : new BoundingRect(0, 0, 0, 0);
+
+    if (svgWidth != null) {
+      boundingRect.width = svgWidth;
+    }
+
+    if (svgHeight != null) {
+      boundingRect.height = svgHeight;
+    }
+  }
+
+  if (viewBoxRect) {
+    var viewBoxTransform = makeViewBoxTransform(viewBoxRect, boundingRect.width, boundingRect.height);
+    var elRoot = root;
+    root = new Group();
+    root.add(elRoot);
+    elRoot.scale = viewBoxTransform.scale;
+    elRoot.position = viewBoxTransform.position;
+  }
+
+  root.setClipPath(new Rect({
+    shape: boundingRect.plain()
+  }));
+  return {
+    root: root,
+    boundingRect: boundingRect
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var loaders = {
+  geoJSON: geoJSONLoader,
+  svg: geoSVGLoader
+};
+var geoSourceManager = {
+  /**
+   * @param {string} mapName
+   * @param {Object} nameMap
+   * @param {string} nameProperty
+   * @return {Object} source {regions, regionsMap, nameCoordMap, boundingRect}
+   */
+  load: function (mapName, nameMap, nameProperty) {
+    var regions = [];
+    var regionsMap = createHashMap();
+    var nameCoordMap = createHashMap();
+    var boundingRect;
+    var mapRecords = retrieveMap(mapName);
+    each$1(mapRecords, function (record) {
+      var singleSource = loaders[record.type].load(mapName, record, nameProperty);
+      each$1(singleSource.regions, function (region) {
+        var regionName = region.name; // Try use the alias in geoNameMap
+
+        if (nameMap && nameMap.hasOwnProperty(regionName)) {
+          region = region.cloneShallow(regionName = nameMap[regionName]);
+        }
+
+        regions.push(region);
+        regionsMap.set(regionName, region);
+        nameCoordMap.set(regionName, region.center);
+      });
+      var rect = singleSource.boundingRect;
+
+      if (rect) {
+        boundingRect ? boundingRect.union(rect) : boundingRect = rect.clone();
+      }
+    });
+    return {
+      regions: regions,
+      regionsMap: regionsMap,
+      nameCoordMap: nameCoordMap,
+      // FIXME Always return new ?
+      boundingRect: boundingRect || new BoundingRect(0, 0, 0, 0)
+    };
+  },
+
+  /**
+   * @param {string} mapName
+   * @param {string} hostKey For cache.
+   * @return {Array.<module:zrender/Element>} Roots.
+   */
+  makeGraphic: makeInvoker('makeGraphic'),
+
+  /**
+   * @param {string} mapName
+   * @param {string} hostKey For cache.
+   */
+  removeGraphic: makeInvoker('removeGraphic')
+};
+
+function makeInvoker(methodName) {
+  return function (mapName, hostKey) {
+    var mapRecords = retrieveMap(mapName);
+    var results = [];
+    each$1(mapRecords, function (record) {
+      var method = loaders[record.type][methodName];
+      method && results.push(method(mapName, record, hostKey));
+    });
+    return results;
+  };
+}
+
+function retrieveMap(mapName) {
+  var mapRecords = mapDataStorage.retrieveMap(mapName) || [];
+  return mapRecords;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var MapSeries = SeriesModel.extend({
+  type: 'series.map',
+  dependencies: ['geo'],
+  layoutMode: 'box',
+
+  /**
+   * Only first map series of same mapType will drawMap
+   * @type {boolean}
+   */
+  needsDrawMap: false,
+
+  /**
+   * Group of all map series with same mapType
+   * @type {boolean}
+   */
+  seriesGroup: [],
+  getInitialData: function (option) {
+    var data = createListSimply(this, {
+      coordDimensions: ['value'],
+      encodeDefaulter: curry(makeSeriesEncodeForNameBased, this)
+    });
+    var valueDim = data.mapDimension('value');
+    var dataNameMap = createHashMap();
+    var selectTargetList = [];
+    var toAppendNames = [];
+
+    for (var i = 0, len = data.count(); i < len; i++) {
+      var name = data.getName(i);
+      dataNameMap.set(name, true);
+      selectTargetList.push({
+        name: name,
+        value: data.get(valueDim, i),
+        selected: retrieveRawAttr(data, i, 'selected')
+      });
+    }
+
+    var geoSource = geoSourceManager.load(this.getMapType(), this.option.nameMap, this.option.nameProperty);
+    each$1(geoSource.regions, function (region) {
+      var name = region.name;
+
+      if (!dataNameMap.get(name)) {
+        selectTargetList.push({
+          name: name
+        });
+        toAppendNames.push(name);
+      }
+    });
+    this.updateSelectedMap(selectTargetList); // Complete data with missing regions. The consequent processes (like visual
+    // map and render) can not be performed without a "full data". For example,
+    // find `dataIndex` by name.
+
+    data.appendValues([], toAppendNames);
+    return data;
+  },
+
+  /**
+   * If no host geo model, return null, which means using a
+   * inner exclusive geo model.
+   */
+  getHostGeoModel: function () {
+    var geoIndex = this.option.geoIndex;
+    return geoIndex != null ? this.dependentModels.geo[geoIndex] : null;
+  },
+  getMapType: function () {
+    return (this.getHostGeoModel() || this).option.map;
+  },
+  // _fillOption: function (option, mapName) {
+  // Shallow clone
+  // option = zrUtil.extend({}, option);
+  // option.data = geoCreator.getFilledRegions(option.data, mapName, option.nameMap);
+  // return option;
+  // },
+  getRawValue: function (dataIndex) {
+    // Use value stored in data instead because it is calculated from multiple series
+    // FIXME Provide all value of multiple series ?
+    var data = this.getData();
+    return data.get(data.mapDimension('value'), dataIndex);
+  },
+
+  /**
+   * Get model of region
+   * @param  {string} name
+   * @return {module:echarts/model/Model}
+   */
+  getRegionModel: function (regionName) {
+    var data = this.getData();
+    return data.getItemModel(data.indexOfName(regionName));
+  },
+
+  /**
+   * Map tooltip formatter
+   *
+   * @param {number} dataIndex
+   */
+  formatTooltip: function (dataIndex, multipleSeries, dataType, renderMode) {
+    // FIXME orignalData and data is a bit confusing
+    var data = this.getData();
+    var formattedValue = addCommas(this.getRawValue(dataIndex));
+    var name = data.getName(dataIndex);
+    var seriesGroup = this.seriesGroup;
+    var seriesNames = [];
+
+    for (var i = 0; i < seriesGroup.length; i++) {
+      var otherIndex = seriesGroup[i].originalData.indexOfName(name);
+      var valueDim = data.mapDimension('value');
+
+      if (!isNaN(seriesGroup[i].originalData.get(valueDim, otherIndex))) {
+        seriesNames.push(encodeHTML(seriesGroup[i].name));
+      }
+    }
+
+    var newLine = renderMode === 'html' ? '<br/>' : '\n';
+    return seriesNames.join(', ') + newLine + encodeHTML(name + ' : ' + formattedValue);
+  },
+
+  /**
+   * @implement
+   */
+  getTooltipPosition: function (dataIndex) {
+    if (dataIndex != null) {
+      var name = this.getData().getName(dataIndex);
+      var geo = this.coordinateSystem;
+      var region = geo.getRegion(name);
+      return region && geo.dataToPoint(region.center);
+    }
+  },
+  setZoom: function (zoom) {
+    this.option.zoom = zoom;
+  },
+  setCenter: function (center) {
+    this.option.center = center;
+  },
+  defaultOption: {
+    // 一级层叠
+    zlevel: 0,
+    // 二级层叠
+    z: 2,
+    coordinateSystem: 'geo',
+    // map should be explicitly specified since ec3.
+    map: '',
+    // If `geoIndex` is not specified, a exclusive geo will be
+    // created. Otherwise use the specified geo component, and
+    // `map` and `mapType` are ignored.
+    // geoIndex: 0,
+    // 'center' | 'left' | 'right' | 'x%' | {number}
+    left: 'center',
+    // 'center' | 'top' | 'bottom' | 'x%' | {number}
+    top: 'center',
+    // right
+    // bottom
+    // width:
+    // height
+    // Aspect is width / height. Inited to be geoJson bbox aspect
+    // This parameter is used for scale this aspect
+    aspectScale: 0.75,
+    ///// Layout with center and size
+    // If you wan't to put map in a fixed size box with right aspect ratio
+    // This two properties may more conveninet
+    // layoutCenter: [50%, 50%]
+    // layoutSize: 100
+    // 数值合并方式，默认加和，可选为：
+    // 'sum' | 'average' | 'max' | 'min'
+    // mapValueCalculation: 'sum',
+    // 地图数值计算结果小数精度
+    // mapValuePrecision: 0,
+    // 显示图例颜色标识（系列标识的小圆点），图例开启时有效
+    showLegendSymbol: true,
+    // 选择模式，默认关闭，可选single，multiple
+    // selectedMode: false,
+    dataRangeHoverLink: true,
+    // 是否开启缩放及漫游模式
+    // roam: false,
+    // Define left-top, right-bottom coords to control view
+    // For example, [ [180, 90], [-180, -90] ],
+    // higher priority than center and zoom
+    boundingCoords: null,
+    // Default on center of map
+    center: null,
+    zoom: 1,
+    scaleLimit: null,
+    label: {
+      show: false,
+      color: '#000'
+    },
+    // scaleLimit: null,
+    itemStyle: {
+      borderWidth: 0.5,
+      borderColor: '#444',
+      areaColor: '#eee'
+    },
+    emphasis: {
+      label: {
+        show: true,
+        color: 'rgb(100,0,0)'
+      },
+      itemStyle: {
+        areaColor: 'rgba(255,215,0,0.8)'
+      }
+    },
+    nameProperty: 'name'
+  }
+});
+mixin(MapSeries, selectableMixin);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function getFixedItemStyle(model) {
+  var itemStyle = model.getItemStyle();
+  var areaColor = model.get('areaColor'); // If user want the color not to be changed when hover,
+  // they should both set areaColor and color to be null.
+
+  if (areaColor != null) {
+    itemStyle.fill = areaColor;
+  }
+
+  return itemStyle;
+}
+
+function updateMapSelectHandler(mapDraw, mapOrGeoModel, regionsGroup, api, fromView) {
+  regionsGroup.off('click');
+  regionsGroup.off('mousedown');
+
+  if (mapOrGeoModel.get('selectedMode')) {
+    regionsGroup.on('mousedown', function () {
+      mapDraw._mouseDownFlag = true;
+    });
+    regionsGroup.on('click', function (e) {
+      if (!mapDraw._mouseDownFlag) {
+        return;
+      }
+
+      mapDraw._mouseDownFlag = false;
+      var el = e.target;
+
+      while (!el.__regions) {
+        el = el.parent;
+      }
+
+      if (!el) {
+        return;
+      }
+
+      var action = {
+        type: (mapOrGeoModel.mainType === 'geo' ? 'geo' : 'map') + 'ToggleSelect',
+        batch: map(el.__regions, function (region) {
+          return {
+            name: region.name,
+            from: fromView.uid
+          };
+        })
+      };
+      action[mapOrGeoModel.mainType + 'Id'] = mapOrGeoModel.id;
+      api.dispatchAction(action);
+      updateMapSelected(mapOrGeoModel, regionsGroup);
+    });
+  }
+}
+
+function updateMapSelected(mapOrGeoModel, regionsGroup) {
+  // FIXME
+  regionsGroup.eachChild(function (otherRegionEl) {
+    each$1(otherRegionEl.__regions, function (region) {
+      otherRegionEl.trigger(mapOrGeoModel.isSelected(region.name) ? 'emphasis' : 'normal');
+    });
+  });
+}
+/**
+ * @alias module:echarts/component/helper/MapDraw
+ * @param {module:echarts/ExtensionAPI} api
+ * @param {boolean} updateGroup
+ */
+
+
+function MapDraw(api, updateGroup) {
+  var group = new Group();
+  /**
+   * @type {string}
+   * @private
+   */
+
+  this.uid = getUID('ec_map_draw');
+  /**
+   * @type {module:echarts/component/helper/RoamController}
+   * @private
+   */
+
+  this._controller = new RoamController(api.getZr());
+  /**
+   * @type {Object} {target, zoom, zoomLimit}
+   * @private
+   */
+
+  this._controllerHost = {
+    target: updateGroup ? group : null
+  };
+  /**
+   * @type {module:zrender/container/Group}
+   * @readOnly
+   */
+
+  this.group = group;
+  /**
+   * @type {boolean}
+   * @private
+   */
+
+  this._updateGroup = updateGroup;
+  /**
+   * This flag is used to make sure that only one among
+   * `pan`, `zoom`, `click` can occurs, otherwise 'selected'
+   * action may be triggered when `pan`, which is unexpected.
+   * @type {booelan}
+   */
+
+  this._mouseDownFlag;
+  /**
+   * @type {string}
+   */
+
+  this._mapName;
+  /**
+   * @type {boolean}
+   */
+
+  this._initialized;
+  /**
+   * @type {module:zrender/container/Group}
+   */
+
+  group.add(this._regionsGroup = new Group());
+  /**
+   * @type {module:zrender/container/Group}
+   */
+
+  group.add(this._backgroundGroup = new Group());
+}
+
+MapDraw.prototype = {
+  constructor: MapDraw,
+  draw: function (mapOrGeoModel, ecModel, api, fromView, payload) {
+    var isGeo = mapOrGeoModel.mainType === 'geo'; // Map series has data. GEO model that controlled by map series
+    // will be assigned with map data. Other GEO model has no data.
+
+    var data = mapOrGeoModel.getData && mapOrGeoModel.getData();
+    isGeo && ecModel.eachComponent({
+      mainType: 'series',
+      subType: 'map'
+    }, function (mapSeries) {
+      if (!data && mapSeries.getHostGeoModel() === mapOrGeoModel) {
+        data = mapSeries.getData();
+      }
+    });
+    var geo = mapOrGeoModel.coordinateSystem;
+
+    this._updateBackground(geo);
+
+    var regionsGroup = this._regionsGroup;
+    var group = this.group;
+    var transformInfo = geo.getTransformInfo(); // No animation when first draw or in action
+
+    var isFirstDraw = !regionsGroup.childAt(0) || payload;
+    var targetScale;
+
+    if (isFirstDraw) {
+      group.transform = transformInfo.roamTransform;
+      group.decomposeTransform();
+      group.dirty();
+    } else {
+      var target = new Transformable();
+      target.transform = transformInfo.roamTransform;
+      target.decomposeTransform();
+      var props = {
+        scale: target.scale,
+        position: target.position
+      };
+      targetScale = target.scale;
+      updateProps(group, props, mapOrGeoModel);
+    }
+
+    var scale = transformInfo.rawScale;
+    var position = transformInfo.rawPosition;
+    regionsGroup.removeAll();
+    var itemStyleAccessPath = ['itemStyle'];
+    var hoverItemStyleAccessPath = ['emphasis', 'itemStyle'];
+    var labelAccessPath = ['label'];
+    var hoverLabelAccessPath = ['emphasis', 'label'];
+    var nameMap = createHashMap();
+    each$1(geo.regions, function (region) {
+      // Consider in GeoJson properties.name may be duplicated, for example,
+      // there is multiple region named "United Kindom" or "France" (so many
+      // colonies). And it is not appropriate to merge them in geo, which
+      // will make them share the same label and bring trouble in label
+      // location calculation.
+      var regionGroup = nameMap.get(region.name) || nameMap.set(region.name, new Group());
+      var compoundPath = new CompoundPath({
+        segmentIgnoreThreshold: 1,
+        shape: {
+          paths: []
+        }
+      });
+      regionGroup.add(compoundPath);
+      var regionModel = mapOrGeoModel.getRegionModel(region.name) || mapOrGeoModel;
+      var itemStyleModel = regionModel.getModel(itemStyleAccessPath);
+      var hoverItemStyleModel = regionModel.getModel(hoverItemStyleAccessPath);
+      var itemStyle = getFixedItemStyle(itemStyleModel);
+      var hoverItemStyle = getFixedItemStyle(hoverItemStyleModel);
+      var labelModel = regionModel.getModel(labelAccessPath);
+      var hoverLabelModel = regionModel.getModel(hoverLabelAccessPath);
+      var dataIdx; // Use the itemStyle in data if has data
+
+      if (data) {
+        dataIdx = data.indexOfName(region.name); // Only visual color of each item will be used. It can be encoded by dataRange
+        // But visual color of series is used in symbol drawing
+        //
+        // Visual color for each series is for the symbol draw
+
+        var visualColor = data.getItemVisual(dataIdx, 'color', true);
+
+        if (visualColor) {
+          itemStyle.fill = visualColor;
+        }
+      }
+
+      var transformPoint = function (point) {
+        return [point[0] * scale[0] + position[0], point[1] * scale[1] + position[1]];
+      };
+
+      each$1(region.geometries, function (geometry) {
+        if (geometry.type !== 'polygon') {
+          return;
+        }
+
+        var points = [];
+
+        for (var i = 0; i < geometry.exterior.length; ++i) {
+          points.push(transformPoint(geometry.exterior[i]));
+        }
+
+        compoundPath.shape.paths.push(new Polygon({
+          segmentIgnoreThreshold: 1,
+          shape: {
+            points: points
+          }
+        }));
+
+        for (var i = 0; i < (geometry.interiors ? geometry.interiors.length : 0); ++i) {
+          var interior = geometry.interiors[i];
+          var points = [];
+
+          for (var j = 0; j < interior.length; ++j) {
+            points.push(transformPoint(interior[j]));
+          }
+
+          compoundPath.shape.paths.push(new Polygon({
+            segmentIgnoreThreshold: 1,
+            shape: {
+              points: points
+            }
+          }));
+        }
+      });
+      compoundPath.setStyle(itemStyle);
+      compoundPath.style.strokeNoScale = true;
+      compoundPath.culling = true; // Label
+
+      var showLabel = labelModel.get('show');
+      var hoverShowLabel = hoverLabelModel.get('show');
+      var isDataNaN = data && isNaN(data.get(data.mapDimension('value'), dataIdx));
+      var itemLayout = data && data.getItemLayout(dataIdx); // In the following cases label will be drawn
+      // 1. In map series and data value is NaN
+      // 2. In geo component
+      // 4. Region has no series legendSymbol, which will be add a showLabel flag in mapSymbolLayout
+
+      if (isGeo || isDataNaN && (showLabel || hoverShowLabel) || itemLayout && itemLayout.showLabel) {
+        var query = !isGeo ? dataIdx : region.name;
+        var labelFetcher; // Consider dataIdx not found.
+
+        if (!data || dataIdx >= 0) {
+          labelFetcher = mapOrGeoModel;
+        }
+
+        var textEl = new Text({
+          position: transformPoint(region.center.slice()),
+          // FIXME
+          // label rotation is not support yet in geo or regions of series-map
+          // that has no data. The rotation will be effected by this `scale`.
+          // So needed to change to RectText?
+          scale: [1 / group.scale[0], 1 / group.scale[1]],
+          z2: 10,
+          silent: true
+        });
+        setLabelStyle(textEl.style, textEl.hoverStyle = {}, labelModel, hoverLabelModel, {
+          labelFetcher: labelFetcher,
+          labelDataIndex: query,
+          defaultText: region.name,
+          useInsideStyle: false
+        }, {
+          textAlign: 'center',
+          textVerticalAlign: 'middle'
+        });
+
+        if (!isFirstDraw) {
+          // Text animation
+          var textScale = [1 / targetScale[0], 1 / targetScale[1]];
+          updateProps(textEl, {
+            scale: textScale
+          }, mapOrGeoModel);
+        }
+
+        regionGroup.add(textEl);
+      } // setItemGraphicEl, setHoverStyle after all polygons and labels
+      // are added to the rigionGroup
+
+
+      if (data) {
+        data.setItemGraphicEl(dataIdx, regionGroup);
+      } else {
+        var regionModel = mapOrGeoModel.getRegionModel(region.name); // Package custom mouse event for geo component
+
+        compoundPath.eventData = {
+          componentType: 'geo',
+          componentIndex: mapOrGeoModel.componentIndex,
+          geoIndex: mapOrGeoModel.componentIndex,
+          name: region.name,
+          region: regionModel && regionModel.option || {}
+        };
+      }
+
+      var groupRegions = regionGroup.__regions || (regionGroup.__regions = []);
+      groupRegions.push(region);
+      regionGroup.highDownSilentOnTouch = !!mapOrGeoModel.get('selectedMode');
+      setHoverStyle(regionGroup, hoverItemStyle);
+      regionsGroup.add(regionGroup);
+    });
+
+    this._updateController(mapOrGeoModel, ecModel, api);
+
+    updateMapSelectHandler(this, mapOrGeoModel, regionsGroup, api, fromView);
+    updateMapSelected(mapOrGeoModel, regionsGroup);
+  },
+  remove: function () {
+    this._regionsGroup.removeAll();
+
+    this._backgroundGroup.removeAll();
+
+    this._controller.dispose();
+
+    this._mapName && geoSourceManager.removeGraphic(this._mapName, this.uid);
+    this._mapName = null;
+    this._controllerHost = {};
+  },
+  _updateBackground: function (geo) {
+    var mapName = geo.map;
+
+    if (this._mapName !== mapName) {
+      each$1(geoSourceManager.makeGraphic(mapName, this.uid), function (root) {
+        this._backgroundGroup.add(root);
+      }, this);
+    }
+
+    this._mapName = mapName;
+  },
+  _updateController: function (mapOrGeoModel, ecModel, api) {
+    var geo = mapOrGeoModel.coordinateSystem;
+    var controller = this._controller;
+    var controllerHost = this._controllerHost;
+    controllerHost.zoomLimit = mapOrGeoModel.get('scaleLimit');
+    controllerHost.zoom = geo.getZoom(); // roamType is will be set default true if it is null
+
+    controller.enable(mapOrGeoModel.get('roam') || false);
+    var mainType = mapOrGeoModel.mainType;
+
+    function makeActionBase() {
+      var action = {
+        type: 'geoRoam',
+        componentType: mainType
+      };
+      action[mainType + 'Id'] = mapOrGeoModel.id;
+      return action;
+    }
+
+    controller.off('pan').on('pan', function (e) {
+      this._mouseDownFlag = false;
+      updateViewOnPan(controllerHost, e.dx, e.dy);
+      api.dispatchAction(extend(makeActionBase(), {
+        dx: e.dx,
+        dy: e.dy
+      }));
+    }, this);
+    controller.off('zoom').on('zoom', function (e) {
+      this._mouseDownFlag = false;
+      updateViewOnZoom(controllerHost, e.scale, e.originX, e.originY);
+      api.dispatchAction(extend(makeActionBase(), {
+        zoom: e.scale,
+        originX: e.originX,
+        originY: e.originY
+      }));
+
+      if (this._updateGroup) {
+        var scale = this.group.scale;
+
+        this._regionsGroup.traverse(function (el) {
+          if (el.type === 'text') {
+            el.attr('scale', [1 / scale[0], 1 / scale[1]]);
+          }
+        });
+      }
+    }, this);
+    controller.setPointerChecker(function (e, x, y) {
+      return geo.getViewRectAfterRoam().contain(x, y) && !onIrrelevantElement(e, api, mapOrGeoModel);
+    });
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var HIGH_DOWN_PROP = '__seriesMapHighDown';
+var RECORD_VERSION_PROP = '__seriesMapCallKey';
+extendChartView({
+  type: 'map',
+  render: function (mapModel, ecModel, api, payload) {
+    // Not render if it is an toggleSelect action from self
+    if (payload && payload.type === 'mapToggleSelect' && payload.from === this.uid) {
+      return;
+    }
+
+    var group = this.group;
+    group.removeAll();
+
+    if (mapModel.getHostGeoModel()) {
+      return;
+    } // Not update map if it is an roam action from self
+
+
+    if (!(payload && payload.type === 'geoRoam' && payload.componentType === 'series' && payload.seriesId === mapModel.id)) {
+      if (mapModel.needsDrawMap) {
+        var mapDraw = this._mapDraw || new MapDraw(api, true);
+        group.add(mapDraw.group);
+        mapDraw.draw(mapModel, ecModel, api, this, payload);
+        this._mapDraw = mapDraw;
+      } else {
+        // Remove drawed map
+        this._mapDraw && this._mapDraw.remove();
+        this._mapDraw = null;
+      }
+    } else {
+      var mapDraw = this._mapDraw;
+      mapDraw && group.add(mapDraw.group);
+    }
+
+    mapModel.get('showLegendSymbol') && ecModel.getComponent('legend') && this._renderSymbols(mapModel, ecModel, api);
+  },
+  remove: function () {
+    this._mapDraw && this._mapDraw.remove();
+    this._mapDraw = null;
+    this.group.removeAll();
+  },
+  dispose: function () {
+    this._mapDraw && this._mapDraw.remove();
+    this._mapDraw = null;
+  },
+  _renderSymbols: function (mapModel, ecModel, api) {
+    var originalData = mapModel.originalData;
+    var group = this.group;
+    originalData.each(originalData.mapDimension('value'), function (value, originalDataIndex) {
+      if (isNaN(value)) {
+        return;
+      }
+
+      var layout = originalData.getItemLayout(originalDataIndex);
+
+      if (!layout || !layout.point) {
+        // Not exists in map
+        return;
+      }
+
+      var point = layout.point;
+      var offset = layout.offset;
+      var circle = new Circle({
+        style: {
+          // Because the special of map draw.
+          // Which needs statistic of multiple series and draw on one map.
+          // And each series also need a symbol with legend color
+          //
+          // Layout and visual are put one the different data
+          fill: mapModel.getData().getVisual('color')
+        },
+        shape: {
+          cx: point[0] + offset * 9,
+          cy: point[1],
+          r: 3
+        },
+        silent: true,
+        // Do not overlap the first series, on which labels are displayed.
+        z2: 8 + (!offset ? Z2_EMPHASIS_LIFT + 1 : 0)
+      }); // Only the series that has the first value on the same region is in charge of rendering the label.
+      // But consider the case:
+      // series: [
+      //     {id: 'X', type: 'map', map: 'm', {data: [{name: 'A', value: 11}, {name: 'B', {value: 22}]},
+      //     {id: 'Y', type: 'map', map: 'm', {data: [{name: 'A', value: 21}, {name: 'C', {value: 33}]}
+      // ]
+      // The offset `0` of item `A` is at series `X`, but of item `C` is at series `Y`.
+      // For backward compatibility, we follow the rule that render label `A` by the
+      // settings on series `X` but render label `C` by the settings on series `Y`.
+
+      if (!offset) {
+        var fullData = mapModel.mainSeries.getData();
+        var name = originalData.getName(originalDataIndex);
+        var fullIndex = fullData.indexOfName(name);
+        var itemModel = originalData.getItemModel(originalDataIndex);
+        var labelModel = itemModel.getModel('label');
+        var hoverLabelModel = itemModel.getModel('emphasis.label');
+        var regionGroup = fullData.getItemGraphicEl(fullIndex); // `getFormattedLabel` needs to use `getData` inside. Here
+        // `mapModel.getData()` is shallow cloned from `mainSeries.getData()`.
+        // FIXME
+        // If this is not the `mainSeries`, the item model (like label formatter)
+        // set on original data item will never get. But it has been working
+        // like that from the begining, and this scenario is rarely encountered.
+        // So it won't be fixed until have to.
+
+        var normalText = retrieve2(mapModel.getFormattedLabel(fullIndex, 'normal'), name);
+        var emphasisText = retrieve2(mapModel.getFormattedLabel(fullIndex, 'emphasis'), normalText);
+        var highDownRecord = regionGroup[HIGH_DOWN_PROP];
+        var recordVersion = Math.random(); // Prevent from register listeners duplicatedly when roaming.
+
+        if (!highDownRecord) {
+          highDownRecord = regionGroup[HIGH_DOWN_PROP] = {};
+          var onEmphasis = curry(onRegionHighDown, true);
+          var onNormal = curry(onRegionHighDown, false);
+          regionGroup.on('mouseover', onEmphasis).on('mouseout', onNormal).on('emphasis', onEmphasis).on('normal', onNormal);
+        } // Prevent removed regions effect current grapics.
+
+
+        regionGroup[RECORD_VERSION_PROP] = recordVersion;
+        extend(highDownRecord, {
+          recordVersion: recordVersion,
+          circle: circle,
+          labelModel: labelModel,
+          hoverLabelModel: hoverLabelModel,
+          emphasisText: emphasisText,
+          normalText: normalText
+        }); // FIXME
+        // Consider set option when emphasis.
+
+        enterRegionHighDown(highDownRecord, false);
+      }
+
+      group.add(circle);
+    });
+  }
+});
+
+function onRegionHighDown(toHighOrDown) {
+  var highDownRecord = this[HIGH_DOWN_PROP];
+
+  if (highDownRecord && highDownRecord.recordVersion === this[RECORD_VERSION_PROP]) {
+    enterRegionHighDown(highDownRecord, toHighOrDown);
+  }
+}
+
+function enterRegionHighDown(highDownRecord, toHighOrDown) {
+  var circle = highDownRecord.circle;
+  var labelModel = highDownRecord.labelModel;
+  var hoverLabelModel = highDownRecord.hoverLabelModel;
+  var emphasisText = highDownRecord.emphasisText;
+  var normalText = highDownRecord.normalText;
+
+  if (toHighOrDown) {
+    circle.style.extendFrom(setTextStyle({}, hoverLabelModel, {
+      text: hoverLabelModel.get('show') ? emphasisText : null
+    }, {
+      isRectText: true,
+      useInsideStyle: false
+    }, true)); // Make label upper than others if overlaps.
+
+    circle.__mapOriginalZ2 = circle.z2;
+    circle.z2 += Z2_EMPHASIS_LIFT;
+  } else {
+    setTextStyle(circle.style, labelModel, {
+      text: labelModel.get('show') ? normalText : null,
+      textPosition: labelModel.getShallow('position') || 'bottom'
+    }, {
+      isRectText: true,
+      useInsideStyle: false
+    }); // Trigger normalize style like padding.
+
+    circle.dirty(false);
+
+    if (circle.__mapOriginalZ2 != null) {
+      circle.z2 = circle.__mapOriginalZ2;
+      circle.__mapOriginalZ2 = null;
+    }
+  }
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @payload
+ * @property {string} [componentType=series]
+ * @property {number} [dx]
+ * @property {number} [dy]
+ * @property {number} [zoom]
+ * @property {number} [originX]
+ * @property {number} [originY]
+ */
+
+registerAction({
+  type: 'geoRoam',
+  event: 'geoRoam',
+  update: 'updateTransform'
+}, function (payload, ecModel) {
+  var componentType = payload.componentType || 'series';
+  ecModel.eachComponent({
+    mainType: componentType,
+    query: payload
+  }, function (componentModel) {
+    var geo = componentModel.coordinateSystem;
+
+    if (geo.type !== 'geo') {
+      return;
+    }
+
+    var res = updateCenterAndZoom(geo, payload, componentModel.get('scaleLimit'));
+    componentModel.setCenter && componentModel.setCenter(res.center);
+    componentModel.setZoom && componentModel.setZoom(res.zoom); // All map series with same `map` use the same geo coordinate system
+    // So the center and zoom must be in sync. Include the series not selected by legend
+
+    if (componentType === 'series') {
+      each$1(componentModel.seriesGroup, function (seriesModel) {
+        seriesModel.setCenter(res.center);
+        seriesModel.setZoom(res.zoom);
+      });
+    }
+  });
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * [Geo description]
+ * For backward compatibility, the orginal interface:
+ * `name, map, geoJson, specialAreas, nameMap` is kept.
+ *
+ * @param {string|Object} name
+ * @param {string} map Map type
+ *        Specify the positioned areas by left, top, width, height
+ * @param {Object.<string, string>} [nameMap]
+ *        Specify name alias
+ * @param {boolean} [invertLongitute=true]
+ */
+
+function Geo(name, map$$1, nameMap, invertLongitute) {
+  View.call(this, name);
+  /**
+   * Map type
+   * @type {string}
+   */
+
+  this.map = map$$1;
+  var source = geoSourceManager.load(map$$1, nameMap);
+  this._nameCoordMap = source.nameCoordMap;
+  this._regionsMap = source.regionsMap;
+  this._invertLongitute = invertLongitute == null ? true : invertLongitute;
+  /**
+   * @readOnly
+   */
+
+  this.regions = source.regions;
+  /**
+   * @type {module:zrender/src/core/BoundingRect}
+   */
+
+  this._rect = source.boundingRect;
+}
+
+Geo.prototype = {
+  constructor: Geo,
+  type: 'geo',
+
+  /**
+   * @param {Array.<string>}
+   * @readOnly
+   */
+  dimensions: ['lng', 'lat'],
+
+  /**
+   * If contain given lng,lat coord
+   * @param {Array.<number>}
+   * @readOnly
+   */
+  containCoord: function (coord) {
+    var regions = this.regions;
+
+    for (var i = 0; i < regions.length; i++) {
+      if (regions[i].contain(coord)) {
+        return true;
+      }
+    }
+
+    return false;
+  },
+
+  /**
+   * @override
+   */
+  transformTo: function (x, y, width, height) {
+    var rect = this.getBoundingRect();
+    var invertLongitute = this._invertLongitute;
+    rect = rect.clone();
+
+    if (invertLongitute) {
+      // Longitute is inverted
+      rect.y = -rect.y - rect.height;
+    }
+
+    var rawTransformable = this._rawTransformable;
+    rawTransformable.transform = rect.calculateTransform(new BoundingRect(x, y, width, height));
+    rawTransformable.decomposeTransform();
+
+    if (invertLongitute) {
+      var scale = rawTransformable.scale;
+      scale[1] = -scale[1];
+    }
+
+    rawTransformable.updateTransform();
+
+    this._updateTransform();
+  },
+
+  /**
+   * @param {string} name
+   * @return {module:echarts/coord/geo/Region}
+   */
+  getRegion: function (name) {
+    return this._regionsMap.get(name);
+  },
+  getRegionByCoord: function (coord) {
+    var regions = this.regions;
+
+    for (var i = 0; i < regions.length; i++) {
+      if (regions[i].contain(coord)) {
+        return regions[i];
+      }
+    }
+  },
+
+  /**
+   * Add geoCoord for indexing by name
+   * @param {string} name
+   * @param {Array.<number>} geoCoord
+   */
+  addGeoCoord: function (name, geoCoord) {
+    this._nameCoordMap.set(name, geoCoord);
+  },
+
+  /**
+   * Get geoCoord by name
+   * @param {string} name
+   * @return {Array.<number>}
+   */
+  getGeoCoord: function (name) {
+    return this._nameCoordMap.get(name);
+  },
+
+  /**
+   * @override
+   */
+  getBoundingRect: function () {
+    return this._rect;
+  },
+
+  /**
+   * @param {string|Array.<number>} data
+   * @param {boolean} noRoam
+   * @param {Array.<number>} [out]
+   * @return {Array.<number>}
+   */
+  dataToPoint: function (data, noRoam, out) {
+    if (typeof data === 'string') {
+      // Map area name to geoCoord
+      data = this.getGeoCoord(data);
+    }
+
+    if (data) {
+      return View.prototype.dataToPoint.call(this, data, noRoam, out);
+    }
+  },
+
+  /**
+   * @override
+   */
+  convertToPixel: curry(doConvert$1, 'dataToPoint'),
+
+  /**
+   * @override
+   */
+  convertFromPixel: curry(doConvert$1, 'pointToData')
+};
+mixin(Geo, View);
+
+function doConvert$1(methodName, ecModel, finder, value) {
+  var geoModel = finder.geoModel;
+  var seriesModel = finder.seriesModel;
+  var coordSys = geoModel ? geoModel.coordinateSystem : seriesModel ? seriesModel.coordinateSystem // For map.
+  || (seriesModel.getReferringComponents('geo')[0] || {}).coordinateSystem : null;
+  return coordSys === this ? coordSys[methodName](value) : null;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * Resize method bound to the geo
+ * @param {module:echarts/coord/geo/GeoModel|module:echarts/chart/map/MapModel} geoModel
+ * @param {module:echarts/ExtensionAPI} api
+ */
+
+function resizeGeo(geoModel, api) {
+  var boundingCoords = geoModel.get('boundingCoords');
+
+  if (boundingCoords != null) {
+    var leftTop = boundingCoords[0];
+    var rightBottom = boundingCoords[1];
+
+    if (isNaN(leftTop[0]) || isNaN(leftTop[1]) || isNaN(rightBottom[0]) || isNaN(rightBottom[1])) {} else {
+      this.setBoundingRect(leftTop[0], leftTop[1], rightBottom[0] - leftTop[0], rightBottom[1] - leftTop[1]);
+    }
+  }
+
+  var rect = this.getBoundingRect();
+  var boxLayoutOption;
+  var center = geoModel.get('layoutCenter');
+  var size = geoModel.get('layoutSize');
+  var viewWidth = api.getWidth();
+  var viewHeight = api.getHeight();
+  var aspect = rect.width / rect.height * this.aspectScale;
+  var useCenterAndSize = false;
+
+  if (center && size) {
+    center = [parsePercent$1(center[0], viewWidth), parsePercent$1(center[1], viewHeight)];
+    size = parsePercent$1(size, Math.min(viewWidth, viewHeight));
+
+    if (!isNaN(center[0]) && !isNaN(center[1]) && !isNaN(size)) {
+      useCenterAndSize = true;
+    } else {}
+  }
+
+  var viewRect;
+
+  if (useCenterAndSize) {
+    var viewRect = {};
+
+    if (aspect > 1) {
+      // Width is same with size
+      viewRect.width = size;
+      viewRect.height = size / aspect;
+    } else {
+      viewRect.height = size;
+      viewRect.width = size * aspect;
+    }
+
+    viewRect.y = center[1] - viewRect.height / 2;
+    viewRect.x = center[0] - viewRect.width / 2;
+  } else {
+    // Use left/top/width/height
+    boxLayoutOption = geoModel.getBoxLayoutParams(); // 0.75 rate
+
+    boxLayoutOption.aspect = aspect;
+    viewRect = getLayoutRect(boxLayoutOption, {
+      width: viewWidth,
+      height: viewHeight
+    });
+  }
+
+  this.setViewRect(viewRect.x, viewRect.y, viewRect.width, viewRect.height);
+  this.setCenter(geoModel.get('center'));
+  this.setZoom(geoModel.get('zoom'));
+}
+/**
+ * @param {module:echarts/coord/Geo} geo
+ * @param {module:echarts/model/Model} model
+ * @inner
+ */
+
+
+function setGeoCoords(geo, model) {
+  each$1(model.get('geoCoord'), function (geoCoord, name) {
+    geo.addGeoCoord(name, geoCoord);
+  });
+}
+
+var geoCreator = {
+  // For deciding which dimensions to use when creating list data
+  dimensions: Geo.prototype.dimensions,
+  create: function (ecModel, api) {
+    var geoList = []; // FIXME Create each time may be slow
+
+    ecModel.eachComponent('geo', function (geoModel, idx) {
+      var name = geoModel.get('map');
+      var aspectScale = geoModel.get('aspectScale');
+      var invertLongitute = true;
+      var mapRecords = mapDataStorage.retrieveMap(name);
+
+      if (mapRecords && mapRecords[0] && mapRecords[0].type === 'svg') {
+        aspectScale == null && (aspectScale = 1);
+        invertLongitute = false;
+      } else {
+        aspectScale == null && (aspectScale = 0.75);
+      }
+
+      var geo = new Geo(name + idx, name, geoModel.get('nameMap'), invertLongitute);
+      geo.aspectScale = aspectScale;
+      geo.zoomLimit = geoModel.get('scaleLimit');
+      geoList.push(geo);
+      setGeoCoords(geo, geoModel);
+      geoModel.coordinateSystem = geo;
+      geo.model = geoModel; // Inject resize method
+
+      geo.resize = resizeGeo;
+      geo.resize(geoModel, api);
+    });
+    ecModel.eachSeries(function (seriesModel) {
+      var coordSys = seriesModel.get('coordinateSystem');
+
+      if (coordSys === 'geo') {
+        var geoIndex = seriesModel.get('geoIndex') || 0;
+        seriesModel.coordinateSystem = geoList[geoIndex];
+      }
+    }); // If has map series
+
+    var mapModelGroupBySeries = {};
+    ecModel.eachSeriesByType('map', function (seriesModel) {
+      if (!seriesModel.getHostGeoModel()) {
+        var mapType = seriesModel.getMapType();
+        mapModelGroupBySeries[mapType] = mapModelGroupBySeries[mapType] || [];
+        mapModelGroupBySeries[mapType].push(seriesModel);
+      }
+    });
+    each$1(mapModelGroupBySeries, function (mapSeries, mapType) {
+      var nameMapList = map(mapSeries, function (singleMapSeries) {
+        return singleMapSeries.get('nameMap');
+      });
+      var geo = new Geo(mapType, mapType, mergeAll(nameMapList));
+      geo.zoomLimit = retrieve.apply(null, map(mapSeries, function (singleMapSeries) {
+        return singleMapSeries.get('scaleLimit');
+      }));
+      geoList.push(geo); // Inject resize method
+
+      geo.resize = resizeGeo;
+      geo.aspectScale = mapSeries[0].get('aspectScale');
+      geo.resize(mapSeries[0], api);
+      each$1(mapSeries, function (singleMapSeries) {
+        singleMapSeries.coordinateSystem = geo;
+        setGeoCoords(geo, singleMapSeries);
+      });
+    });
+    return geoList;
+  },
+
+  /**
+   * Fill given regions array
+   * @param  {Array.<Object>} originRegionArr
+   * @param  {string} mapName
+   * @param  {Object} [nameMap]
+   * @return {Array}
+   */
+  getFilledRegions: function (originRegionArr, mapName, nameMap) {
+    // Not use the original
+    var regionsArr = (originRegionArr || []).slice();
+    var dataNameMap = createHashMap();
+
+    for (var i = 0; i < regionsArr.length; i++) {
+      dataNameMap.set(regionsArr[i].name, regionsArr[i]);
+    }
+
+    var source = geoSourceManager.load(mapName, nameMap);
+    each$1(source.regions, function (region) {
+      var name = region.name;
+      !dataNameMap.get(name) && regionsArr.push({
+        name: name
+      });
+    });
+    return regionsArr;
+  }
+};
+registerCoordinateSystem('geo', geoCreator);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var mapSymbolLayout = function (ecModel) {
+  var processedMapType = {};
+  ecModel.eachSeriesByType('map', function (mapSeries) {
+    var mapType = mapSeries.getMapType();
+
+    if (mapSeries.getHostGeoModel() || processedMapType[mapType]) {
+      return;
+    }
+
+    var mapSymbolOffsets = {};
+    each$1(mapSeries.seriesGroup, function (subMapSeries) {
+      var geo = subMapSeries.coordinateSystem;
+      var data = subMapSeries.originalData;
+
+      if (subMapSeries.get('showLegendSymbol') && ecModel.getComponent('legend')) {
+        data.each(data.mapDimension('value'), function (value, idx) {
+          var name = data.getName(idx);
+          var region = geo.getRegion(name); // If input series.data is [11, 22, '-'/null/undefined, 44],
+          // it will be filled with NaN: [11, 22, NaN, 44] and NaN will
+          // not be drawn. So here must validate if value is NaN.
+
+          if (!region || isNaN(value)) {
+            return;
+          }
+
+          var offset = mapSymbolOffsets[name] || 0;
+          var point = geo.dataToPoint(region.center);
+          mapSymbolOffsets[name] = offset + 1;
+          data.setItemLayout(idx, {
+            point: point,
+            offset: offset
+          });
+        });
+      }
+    }); // Show label of those region not has legendSymbol(which is offset 0)
+
+    var data = mapSeries.getData();
+    data.each(function (idx) {
+      var name = data.getName(idx);
+      var layout = data.getItemLayout(idx) || {};
+      layout.showLabel = !mapSymbolOffsets[name];
+      data.setItemLayout(idx, layout);
+    });
+    processedMapType[mapType] = true;
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var mapVisual$1 = function (ecModel) {
+  ecModel.eachSeriesByType('map', function (seriesModel) {
+    var colorList = seriesModel.get('color');
+    var itemStyleModel = seriesModel.getModel('itemStyle');
+    var areaColor = itemStyleModel.get('areaColor');
+    var color = itemStyleModel.get('color') || colorList[seriesModel.seriesIndex % colorList.length];
+    seriesModel.getData().setVisual({
+      'areaColor': areaColor,
+      'color': color
+    });
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @param {Array.<module:echarts/data/List>} datas
+ * @param {string} statisticType 'average' 'sum'
+ * @inner
+ */
+
+function dataStatistics(datas, statisticType) {
+  var dataNameMap = {};
+  each$1(datas, function (data) {
+    data.each(data.mapDimension('value'), function (value, idx) {
+      // Add prefix to avoid conflict with Object.prototype.
+      var mapKey = 'ec-' + data.getName(idx);
+      dataNameMap[mapKey] = dataNameMap[mapKey] || [];
+
+      if (!isNaN(value)) {
+        dataNameMap[mapKey].push(value);
+      }
+    });
+  });
+  return datas[0].map(datas[0].mapDimension('value'), function (value, idx) {
+    var mapKey = 'ec-' + datas[0].getName(idx);
+    var sum = 0;
+    var min = Infinity;
+    var max = -Infinity;
+    var len = dataNameMap[mapKey].length;
+
+    for (var i = 0; i < len; i++) {
+      min = Math.min(min, dataNameMap[mapKey][i]);
+      max = Math.max(max, dataNameMap[mapKey][i]);
+      sum += dataNameMap[mapKey][i];
+    }
+
+    var result;
+
+    if (statisticType === 'min') {
+      result = min;
+    } else if (statisticType === 'max') {
+      result = max;
+    } else if (statisticType === 'average') {
+      result = sum / len;
+    } else {
+      result = sum;
+    }
+
+    return len === 0 ? NaN : result;
+  });
+}
+
+var mapDataStatistic = function (ecModel) {
+  var seriesGroups = {};
+  ecModel.eachSeriesByType('map', function (seriesModel) {
+    var hostGeoModel = seriesModel.getHostGeoModel();
+    var key = hostGeoModel ? 'o' + hostGeoModel.id : 'i' + seriesModel.getMapType();
+    (seriesGroups[key] = seriesGroups[key] || []).push(seriesModel);
+  });
+  each$1(seriesGroups, function (seriesList, key) {
+    var data = dataStatistics(map(seriesList, function (seriesModel) {
+      return seriesModel.getData();
+    }), seriesList[0].get('mapValueCalculation'));
+
+    for (var i = 0; i < seriesList.length; i++) {
+      seriesList[i].originalData = seriesList[i].getData();
+    } // FIXME Put where?
+
+
+    for (var i = 0; i < seriesList.length; i++) {
+      seriesList[i].seriesGroup = seriesList;
+      seriesList[i].needsDrawMap = i === 0 && !seriesList[i].getHostGeoModel();
+      seriesList[i].setData(data.cloneShallow());
+      seriesList[i].mainSeries = seriesList[0];
+    }
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var backwardCompat$2 = function (option) {
+  // Save geoCoord
+  var mapSeries = [];
+  each$1(option.series, function (seriesOpt) {
+    if (seriesOpt && seriesOpt.type === 'map') {
+      mapSeries.push(seriesOpt);
+      seriesOpt.map = seriesOpt.map || seriesOpt.mapType; // Put x, y, width, height, x2, y2 in the top level
+
+      defaults(seriesOpt, seriesOpt.mapLocation);
+    }
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerLayout(mapSymbolLayout);
+registerVisual(mapVisual$1);
+registerProcessor(PRIORITY.PROCESSOR.STATISTIC, mapDataStatistic);
+registerPreprocessor(backwardCompat$2);
+createDataSelectAction('map', [{
+  type: 'mapToggleSelect',
+  event: 'mapselectchanged',
+  method: 'toggleSelected'
+}, {
+  type: 'mapSelect',
+  event: 'mapselected',
+  method: 'select'
+}, {
+  type: 'mapUnSelect',
+  event: 'mapunselected',
+  method: 'unSelect'
+}]);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/* global Uint32Array, Float64Array, Float32Array */
+var Uint32Arr = typeof Uint32Array === 'undefined' ? Array : Uint32Array;
+var Float64Arr = typeof Float64Array === 'undefined' ? Array : Float64Array;
+
+function compatEc2(seriesOpt) {
+  var data = seriesOpt.data;
+
+  if (data && data[0] && data[0][0] && data[0][0].coord) {
+    seriesOpt.data = map(data, function (itemOpt) {
+      var coords = [itemOpt[0].coord, itemOpt[1].coord];
+      var target = {
+        coords: coords
+      };
+
+      if (itemOpt[0].name) {
+        target.fromName = itemOpt[0].name;
+      }
+
+      if (itemOpt[1].name) {
+        target.toName = itemOpt[1].name;
+      }
+
+      return mergeAll([target, itemOpt[0], itemOpt[1]]);
+    });
+  }
+}
+
+var LinesSeries = SeriesModel.extend({
+  type: 'series.lines',
+  dependencies: ['grid', 'polar'],
+  visualColorAccessPath: 'lineStyle.color',
+  init: function (option) {
+    // The input data may be null/undefined.
+    option.data = option.data || []; // Not using preprocessor because mergeOption may not have series.type
+
+    compatEc2(option);
+
+    var result = this._processFlatCoordsArray(option.data);
+
+    this._flatCoords = result.flatCoords;
+    this._flatCoordsOffset = result.flatCoordsOffset;
+
+    if (result.flatCoords) {
+      option.data = new Float32Array(result.count);
+    }
+
+    LinesSeries.superApply(this, 'init', arguments);
+  },
+  mergeOption: function (option) {
+    compatEc2(option);
+
+    if (option.data) {
+      // Only update when have option data to merge.
+      var result = this._processFlatCoordsArray(option.data);
+
+      this._flatCoords = result.flatCoords;
+      this._flatCoordsOffset = result.flatCoordsOffset;
+
+      if (result.flatCoords) {
+        option.data = new Float32Array(result.count);
+      }
+    }
+
+    LinesSeries.superApply(this, 'mergeOption', arguments);
+  },
+  appendData: function (params) {
+    var result = this._processFlatCoordsArray(params.data);
+
+    if (result.flatCoords) {
+      if (!this._flatCoords) {
+        this._flatCoords = result.flatCoords;
+        this._flatCoordsOffset = result.flatCoordsOffset;
+      } else {
+        this._flatCoords = concatArray(this._flatCoords, result.flatCoords);
+        this._flatCoordsOffset = concatArray(this._flatCoordsOffset, result.flatCoordsOffset);
+      }
+
+      params.data = new Float32Array(result.count);
+    }
+
+    this.getRawData().appendData(params.data);
+  },
+  _getCoordsFromItemModel: function (idx) {
+    var itemModel = this.getData().getItemModel(idx);
+    var coords = itemModel.option instanceof Array ? itemModel.option : itemModel.getShallow('coords');
+    return coords;
+  },
+  getLineCoordsCount: function (idx) {
+    if (this._flatCoordsOffset) {
+      return this._flatCoordsOffset[idx * 2 + 1];
+    } else {
+      return this._getCoordsFromItemModel(idx).length;
+    }
+  },
+  getLineCoords: function (idx, out) {
+    if (this._flatCoordsOffset) {
+      var offset = this._flatCoordsOffset[idx * 2];
+      var len = this._flatCoordsOffset[idx * 2 + 1];
+
+      for (var i = 0; i < len; i++) {
+        out[i] = out[i] || [];
+        out[i][0] = this._flatCoords[offset + i * 2];
+        out[i][1] = this._flatCoords[offset + i * 2 + 1];
+      }
+
+      return len;
+    } else {
+      var coords = this._getCoordsFromItemModel(idx);
+
+      for (var i = 0; i < coords.length; i++) {
+        out[i] = out[i] || [];
+        out[i][0] = coords[i][0];
+        out[i][1] = coords[i][1];
+      }
+
+      return coords.length;
+    }
+  },
+  _processFlatCoordsArray: function (data) {
+    var startOffset = 0;
+
+    if (this._flatCoords) {
+      startOffset = this._flatCoords.length;
+    } // Stored as a typed array. In format
+    // Points Count(2) | x | y | x | y | Points Count(3) | x |  y | x | y | x | y |
+
+
+    if (typeof data[0] === 'number') {
+      var len = data.length; // Store offset and len of each segment
+
+      var coordsOffsetAndLenStorage = new Uint32Arr(len);
+      var coordsStorage = new Float64Arr(len);
+      var coordsCursor = 0;
+      var offsetCursor = 0;
+      var dataCount = 0;
+
+      for (var i = 0; i < len;) {
+        dataCount++;
+        var count = data[i++]; // Offset
+
+        coordsOffsetAndLenStorage[offsetCursor++] = coordsCursor + startOffset; // Len
+
+        coordsOffsetAndLenStorage[offsetCursor++] = count;
+
+        for (var k = 0; k < count; k++) {
+          var x = data[i++];
+          var y = data[i++];
+          coordsStorage[coordsCursor++] = x;
+          coordsStorage[coordsCursor++] = y;
+
+          
+        }
+      }
+
+      return {
+        flatCoordsOffset: new Uint32Array(coordsOffsetAndLenStorage.buffer, 0, offsetCursor),
+        flatCoords: coordsStorage,
+        count: dataCount
+      };
+    }
+
+    return {
+      flatCoordsOffset: null,
+      flatCoords: null,
+      count: data.length
+    };
+  },
+  getInitialData: function (option, ecModel) {
+    var lineData = new List(['value'], this);
+    lineData.hasItemOption = false;
+    lineData.initData(option.data, [], function (dataItem, dimName, dataIndex, dimIndex) {
+      // dataItem is simply coords
+      if (dataItem instanceof Array) {
+        return NaN;
+      } else {
+        lineData.hasItemOption = true;
+        var value = dataItem.value;
+
+        if (value != null) {
+          return value instanceof Array ? value[dimIndex] : value;
+        }
+      }
+    });
+    return lineData;
+  },
+  formatTooltip: function (dataIndex) {
+    var data = this.getData();
+    var itemModel = data.getItemModel(dataIndex);
+    var name = itemModel.get('name');
+
+    if (name) {
+      return name;
+    }
+
+    var fromName = itemModel.get('fromName');
+    var toName = itemModel.get('toName');
+    var html = [];
+    fromName != null && html.push(fromName);
+    toName != null && html.push(toName);
+    return encodeHTML(html.join(' > '));
+  },
+  preventIncremental: function () {
+    return !!this.get('effect.show');
+  },
+  getProgressive: function () {
+    var progressive = this.option.progressive;
+
+    if (progressive == null) {
+      return this.option.large ? 1e4 : this.get('progressive');
+    }
+
+    return progressive;
+  },
+  getProgressiveThreshold: function () {
+    var progressiveThreshold = this.option.progressiveThreshold;
+
+    if (progressiveThreshold == null) {
+      return this.option.large ? 2e4 : this.get('progressiveThreshold');
+    }
+
+    return progressiveThreshold;
+  },
+  defaultOption: {
+    coordinateSystem: 'geo',
+    zlevel: 0,
+    z: 2,
+    legendHoverLink: true,
+    hoverAnimation: true,
+    // Cartesian coordinate system
+    xAxisIndex: 0,
+    yAxisIndex: 0,
+    symbol: ['none', 'none'],
+    symbolSize: [10, 10],
+    // Geo coordinate system
+    geoIndex: 0,
+    effect: {
+      show: false,
+      period: 4,
+      // Animation delay. support callback
+      // delay: 0,
+      // If move with constant speed px/sec
+      // period will be ignored if this property is > 0,
+      constantSpeed: 0,
+      symbol: 'circle',
+      symbolSize: 3,
+      loop: true,
+      // Length of trail, 0 - 1
+      trailLength: 0.2 // Same with lineStyle.color
+      // color
+
+    },
+    large: false,
+    // Available when large is true
+    largeThreshold: 2000,
+    // If lines are polyline
+    // polyline not support curveness, label, animation
+    polyline: false,
+    // If clip the overflow.
+    // Available when coordinateSystem is cartesian or polar.
+    clip: true,
+    label: {
+      show: false,
+      position: 'end' // distance: 5,
+      // formatter: 标签文本格式器，同Tooltip.formatter，不支持异步回调
+
+    },
+    lineStyle: {
+      opacity: 0.5
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Line path for bezier and straight line draw
+ */
+var straightLineProto = Line.prototype;
+var bezierCurveProto = BezierCurve.prototype;
+
+function isLine(shape) {
+  return isNaN(+shape.cpx1) || isNaN(+shape.cpy1);
+}
+
+var LinePath = extendShape({
+  type: 'ec-line',
+  style: {
+    stroke: '#000',
+    fill: null
+  },
+  shape: {
+    x1: 0,
+    y1: 0,
+    x2: 0,
+    y2: 0,
+    percent: 1,
+    cpx1: null,
+    cpy1: null
+  },
+  buildPath: function (ctx, shape) {
+    this[isLine(shape) ? '_buildPathLine' : '_buildPathCurve'](ctx, shape);
+  },
+  _buildPathLine: straightLineProto.buildPath,
+  _buildPathCurve: bezierCurveProto.buildPath,
+  pointAt: function (t) {
+    return this[isLine(this.shape) ? '_pointAtLine' : '_pointAtCurve'](t);
+  },
+  _pointAtLine: straightLineProto.pointAt,
+  _pointAtCurve: bezierCurveProto.pointAt,
+  tangentAt: function (t) {
+    var shape = this.shape;
+    var p = isLine(shape) ? [shape.x2 - shape.x1, shape.y2 - shape.y1] : this._tangentAtCurve(t);
+    return normalize(p, p);
+  },
+  _tangentAtCurve: bezierCurveProto.tangentAt
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @module echarts/chart/helper/Line
+ */
+var SYMBOL_CATEGORIES = ['fromSymbol', 'toSymbol'];
+
+function makeSymbolTypeKey(symbolCategory) {
+  return '_' + symbolCategory + 'Type';
+}
+/**
+ * @inner
+ */
+
+
+function createSymbol$1(name, lineData, idx) {
+  var symbolType = lineData.getItemVisual(idx, name);
+
+  if (!symbolType || symbolType === 'none') {
+    return;
+  }
+
+  var color = lineData.getItemVisual(idx, 'color');
+  var symbolSize = lineData.getItemVisual(idx, name + 'Size');
+  var symbolRotate = lineData.getItemVisual(idx, name + 'Rotate');
+
+  if (!isArray(symbolSize)) {
+    symbolSize = [symbolSize, symbolSize];
+  }
+
+  var symbolPath = createSymbol(symbolType, -symbolSize[0] / 2, -symbolSize[1] / 2, symbolSize[0], symbolSize[1], color); // rotate by default if symbolRotate is not specified or NaN
+
+  symbolPath.__specifiedRotation = symbolRotate == null || isNaN(symbolRotate) ? void 0 : +symbolRotate * Math.PI / 180 || 0;
+  symbolPath.name = name;
+  return symbolPath;
+}
+
+function createLine(points) {
+  var line = new LinePath({
+    name: 'line',
+    subPixelOptimize: true
+  });
+  setLinePoints(line.shape, points);
+  return line;
+}
+
+function setLinePoints(targetShape, points) {
+  targetShape.x1 = points[0][0];
+  targetShape.y1 = points[0][1];
+  targetShape.x2 = points[1][0];
+  targetShape.y2 = points[1][1];
+  targetShape.percent = 1;
+  var cp1 = points[2];
+
+  if (cp1) {
+    targetShape.cpx1 = cp1[0];
+    targetShape.cpy1 = cp1[1];
+  } else {
+    targetShape.cpx1 = NaN;
+    targetShape.cpy1 = NaN;
+  }
+}
+
+function updateSymbolAndLabelBeforeLineUpdate() {
+  var lineGroup = this;
+  var symbolFrom = lineGroup.childOfName('fromSymbol');
+  var symbolTo = lineGroup.childOfName('toSymbol');
+  var label = lineGroup.childOfName('label'); // Quick reject
+
+  if (!symbolFrom && !symbolTo && label.ignore) {
+    return;
+  }
+
+  var invScale = 1;
+  var parentNode = this.parent;
+
+  while (parentNode) {
+    if (parentNode.scale) {
+      invScale /= parentNode.scale[0];
+    }
+
+    parentNode = parentNode.parent;
+  }
+
+  var line = lineGroup.childOfName('line'); // If line not changed
+  // FIXME Parent scale changed
+
+  if (!this.__dirty && !line.__dirty) {
+    return;
+  }
+
+  var percent = line.shape.percent;
+  var fromPos = line.pointAt(0);
+  var toPos = line.pointAt(percent);
+  var d = sub([], toPos, fromPos);
+  normalize(d, d);
+
+  if (symbolFrom) {
+    symbolFrom.attr('position', fromPos); // Fix #12388
+    // when symbol is set to be 'arrow' in markLine,
+    // symbolRotate value will be ignored, and compulsively use tangent angle.
+    // rotate by default if symbol rotation is not specified
+
+    var specifiedRotation = symbolFrom.__specifiedRotation;
+
+    if (specifiedRotation == null) {
+      var tangent = line.tangentAt(0);
+      symbolFrom.attr('rotation', Math.PI / 2 - Math.atan2(tangent[1], tangent[0]));
+    } else {
+      symbolFrom.attr('rotation', specifiedRotation);
+    }
+
+    symbolFrom.attr('scale', [invScale * percent, invScale * percent]);
+  }
+
+  if (symbolTo) {
+    symbolTo.attr('position', toPos); // Fix #12388
+    // when symbol is set to be 'arrow' in markLine,
+    // symbolRotate value will be ignored, and compulsively use tangent angle.
+    // rotate by default if symbol rotation is not specified
+
+    var specifiedRotation = symbolTo.__specifiedRotation;
+
+    if (specifiedRotation == null) {
+      var tangent = line.tangentAt(1);
+      symbolTo.attr('rotation', -Math.PI / 2 - Math.atan2(tangent[1], tangent[0]));
+    } else {
+      symbolTo.attr('rotation', specifiedRotation);
+    }
+
+    symbolTo.attr('scale', [invScale * percent, invScale * percent]);
+  }
+
+  if (!label.ignore) {
+    label.attr('position', toPos);
+    var textPosition;
+    var textAlign;
+    var textVerticalAlign;
+    var textOrigin;
+    var distance$$1 = label.__labelDistance;
+    var distanceX = distance$$1[0] * invScale;
+    var distanceY = distance$$1[1] * invScale;
+    var halfPercent = percent / 2;
+    var tangent = line.tangentAt(halfPercent);
+    var n = [tangent[1], -tangent[0]];
+    var cp = line.pointAt(halfPercent);
+
+    if (n[1] > 0) {
+      n[0] = -n[0];
+      n[1] = -n[1];
+    }
+
+    var dir = tangent[0] < 0 ? -1 : 1;
+
+    if (label.__position !== 'start' && label.__position !== 'end') {
+      var rotation = -Math.atan2(tangent[1], tangent[0]);
+
+      if (toPos[0] < fromPos[0]) {
+        rotation = Math.PI + rotation;
+      }
+
+      label.attr('rotation', rotation);
+    }
+
+    var dy;
+
+    switch (label.__position) {
+      case 'insideStartTop':
+      case 'insideMiddleTop':
+      case 'insideEndTop':
+      case 'middle':
+        dy = -distanceY;
+        textVerticalAlign = 'bottom';
+        break;
+
+      case 'insideStartBottom':
+      case 'insideMiddleBottom':
+      case 'insideEndBottom':
+        dy = distanceY;
+        textVerticalAlign = 'top';
+        break;
+
+      default:
+        dy = 0;
+        textVerticalAlign = 'middle';
+    }
+
+    switch (label.__position) {
+      case 'end':
+        textPosition = [d[0] * distanceX + toPos[0], d[1] * distanceY + toPos[1]];
+        textAlign = d[0] > 0.8 ? 'left' : d[0] < -0.8 ? 'right' : 'center';
+        textVerticalAlign = d[1] > 0.8 ? 'top' : d[1] < -0.8 ? 'bottom' : 'middle';
+        break;
+
+      case 'start':
+        textPosition = [-d[0] * distanceX + fromPos[0], -d[1] * distanceY + fromPos[1]];
+        textAlign = d[0] > 0.8 ? 'right' : d[0] < -0.8 ? 'left' : 'center';
+        textVerticalAlign = d[1] > 0.8 ? 'bottom' : d[1] < -0.8 ? 'top' : 'middle';
+        break;
+
+      case 'insideStartTop':
+      case 'insideStart':
+      case 'insideStartBottom':
+        textPosition = [distanceX * dir + fromPos[0], fromPos[1] + dy];
+        textAlign = tangent[0] < 0 ? 'right' : 'left';
+        textOrigin = [-distanceX * dir, -dy];
+        break;
+
+      case 'insideMiddleTop':
+      case 'insideMiddle':
+      case 'insideMiddleBottom':
+      case 'middle':
+        textPosition = [cp[0], cp[1] + dy];
+        textAlign = 'center';
+        textOrigin = [0, -dy];
+        break;
+
+      case 'insideEndTop':
+      case 'insideEnd':
+      case 'insideEndBottom':
+        textPosition = [-distanceX * dir + toPos[0], toPos[1] + dy];
+        textAlign = tangent[0] >= 0 ? 'right' : 'left';
+        textOrigin = [distanceX * dir, -dy];
+        break;
+    }
+
+    label.attr({
+      style: {
+        // Use the user specified text align and baseline first
+        textVerticalAlign: label.__verticalAlign || textVerticalAlign,
+        textAlign: label.__textAlign || textAlign
+      },
+      position: textPosition,
+      scale: [invScale, invScale],
+      origin: textOrigin
+    });
+  }
+}
+/**
+ * @constructor
+ * @extends {module:zrender/graphic/Group}
+ * @alias {module:echarts/chart/helper/Line}
+ */
+
+
+function Line$1(lineData, idx, seriesScope) {
+  Group.call(this);
+
+  this._createLine(lineData, idx, seriesScope);
+}
+
+var lineProto = Line$1.prototype; // Update symbol position and rotation
+
+lineProto.beforeUpdate = updateSymbolAndLabelBeforeLineUpdate;
+
+lineProto._createLine = function (lineData, idx, seriesScope) {
+  var seriesModel = lineData.hostModel;
+  var linePoints = lineData.getItemLayout(idx);
+  var line = createLine(linePoints);
+  line.shape.percent = 0;
+  initProps(line, {
+    shape: {
+      percent: 1
+    }
+  }, seriesModel, idx);
+  this.add(line);
+  var label = new Text({
+    name: 'label',
+    // FIXME
+    // Temporary solution for `focusNodeAdjacency`.
+    // line label do not use the opacity of lineStyle.
+    lineLabelOriginalOpacity: 1
+  });
+  this.add(label);
+  each$1(SYMBOL_CATEGORIES, function (symbolCategory) {
+    var symbol = createSymbol$1(symbolCategory, lineData, idx); // symbols must added after line to make sure
+    // it will be updated after line#update.
+    // Or symbol position and rotation update in line#beforeUpdate will be one frame slow
+
+    this.add(symbol);
+    this[makeSymbolTypeKey(symbolCategory)] = lineData.getItemVisual(idx, symbolCategory);
+  }, this);
+
+  this._updateCommonStl(lineData, idx, seriesScope);
+};
+
+lineProto.updateData = function (lineData, idx, seriesScope) {
+  var seriesModel = lineData.hostModel;
+  var line = this.childOfName('line');
+  var linePoints = lineData.getItemLayout(idx);
+  var target = {
+    shape: {}
+  };
+  setLinePoints(target.shape, linePoints);
+  updateProps(line, target, seriesModel, idx);
+  each$1(SYMBOL_CATEGORIES, function (symbolCategory) {
+    var symbolType = lineData.getItemVisual(idx, symbolCategory);
+    var key = makeSymbolTypeKey(symbolCategory); // Symbol changed
+
+    if (this[key] !== symbolType) {
+      this.remove(this.childOfName(symbolCategory));
+      var symbol = createSymbol$1(symbolCategory, lineData, idx);
+      this.add(symbol);
+    }
+
+    this[key] = symbolType;
+  }, this);
+
+  this._updateCommonStl(lineData, idx, seriesScope);
+};
+
+lineProto._updateCommonStl = function (lineData, idx, seriesScope) {
+  var seriesModel = lineData.hostModel;
+  var line = this.childOfName('line');
+  var lineStyle = seriesScope && seriesScope.lineStyle;
+  var hoverLineStyle = seriesScope && seriesScope.hoverLineStyle;
+  var labelModel = seriesScope && seriesScope.labelModel;
+  var hoverLabelModel = seriesScope && seriesScope.hoverLabelModel; // Optimization for large dataset
+
+  if (!seriesScope || lineData.hasItemOption) {
+    var itemModel = lineData.getItemModel(idx);
+    lineStyle = itemModel.getModel('lineStyle').getLineStyle();
+    hoverLineStyle = itemModel.getModel('emphasis.lineStyle').getLineStyle();
+    labelModel = itemModel.getModel('label');
+    hoverLabelModel = itemModel.getModel('emphasis.label');
+  }
+
+  var visualColor = lineData.getItemVisual(idx, 'color');
+  var visualOpacity = retrieve3(lineData.getItemVisual(idx, 'opacity'), lineStyle.opacity, 1);
+  line.useStyle(defaults({
+    strokeNoScale: true,
+    fill: 'none',
+    stroke: visualColor,
+    opacity: visualOpacity
+  }, lineStyle));
+  line.hoverStyle = hoverLineStyle; // Update symbol
+
+  each$1(SYMBOL_CATEGORIES, function (symbolCategory) {
+    var symbol = this.childOfName(symbolCategory);
+
+    if (symbol) {
+      symbol.setColor(visualColor);
+      symbol.setStyle({
+        opacity: visualOpacity
+      });
+    }
+  }, this);
+  var showLabel = labelModel.getShallow('show');
+  var hoverShowLabel = hoverLabelModel.getShallow('show');
+  var label = this.childOfName('label');
+  var defaultLabelColor;
+  var baseText; // FIXME: the logic below probably should be merged to `graphic.setLabelStyle`.
+
+  if (showLabel || hoverShowLabel) {
+    defaultLabelColor = visualColor || '#000';
+    baseText = seriesModel.getFormattedLabel(idx, 'normal', lineData.dataType);
+
+    if (baseText == null) {
+      var rawVal = seriesModel.getRawValue(idx);
+      baseText = rawVal == null ? lineData.getName(idx) : isFinite(rawVal) ? round$1(rawVal) : rawVal;
+    }
+  }
+
+  var normalText = showLabel ? baseText : null;
+  var emphasisText = hoverShowLabel ? retrieve2(seriesModel.getFormattedLabel(idx, 'emphasis', lineData.dataType), baseText) : null;
+  var labelStyle = label.style; // Always set `textStyle` even if `normalStyle.text` is null, because default
+  // values have to be set on `normalStyle`.
+
+  if (normalText != null || emphasisText != null) {
+    setTextStyle(label.style, labelModel, {
+      text: normalText
+    }, {
+      autoColor: defaultLabelColor
+    });
+    label.__textAlign = labelStyle.textAlign;
+    label.__verticalAlign = labelStyle.textVerticalAlign; // 'start', 'middle', 'end'
+
+    label.__position = labelModel.get('position') || 'middle';
+    var distance$$1 = labelModel.get('distance');
+
+    if (!isArray(distance$$1)) {
+      distance$$1 = [distance$$1, distance$$1];
+    }
+
+    label.__labelDistance = distance$$1;
+  }
+
+  if (emphasisText != null) {
+    // Only these properties supported in this emphasis style here.
+    label.hoverStyle = {
+      text: emphasisText,
+      textFill: hoverLabelModel.getTextColor(true),
+      // For merging hover style to normal style, do not use
+      // `hoverLabelModel.getFont()` here.
+      fontStyle: hoverLabelModel.getShallow('fontStyle'),
+      fontWeight: hoverLabelModel.getShallow('fontWeight'),
+      fontSize: hoverLabelModel.getShallow('fontSize'),
+      fontFamily: hoverLabelModel.getShallow('fontFamily')
+    };
+  } else {
+    label.hoverStyle = {
+      text: null
+    };
+  }
+
+  label.ignore = !showLabel && !hoverShowLabel;
+  setHoverStyle(this);
+};
+
+lineProto.highlight = function () {
+  this.trigger('emphasis');
+};
+
+lineProto.downplay = function () {
+  this.trigger('normal');
+};
+
+lineProto.updateLayout = function (lineData, idx) {
+  this.setLinePoints(lineData.getItemLayout(idx));
+};
+
+lineProto.setLinePoints = function (points) {
+  var linePath = this.childOfName('line');
+  setLinePoints(linePath.shape, points);
+  linePath.dirty();
+};
+
+inherits(Line$1, Group);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @module echarts/chart/helper/LineDraw
+ */
+/**
+ * @alias module:echarts/component/marker/LineDraw
+ * @constructor
+ */
+
+function LineDraw(ctor) {
+  this._ctor = ctor || Line$1;
+  this.group = new Group();
+}
+
+var lineDrawProto = LineDraw.prototype;
+
+lineDrawProto.isPersistent = function () {
+  return true;
+};
+/**
+ * @param {module:echarts/data/List} lineData
+ */
+
+
+lineDrawProto.updateData = function (lineData) {
+  var lineDraw = this;
+  var group = lineDraw.group;
+  var oldLineData = lineDraw._lineData;
+  lineDraw._lineData = lineData; // There is no oldLineData only when first rendering or switching from
+  // stream mode to normal mode, where previous elements should be removed.
+
+  if (!oldLineData) {
+    group.removeAll();
+  }
+
+  var seriesScope = makeSeriesScope$1(lineData);
+  lineData.diff(oldLineData).add(function (idx) {
+    doAdd(lineDraw, lineData, idx, seriesScope);
+  }).update(function (newIdx, oldIdx) {
+    doUpdate(lineDraw, oldLineData, lineData, oldIdx, newIdx, seriesScope);
+  }).remove(function (idx) {
+    group.remove(oldLineData.getItemGraphicEl(idx));
+  }).execute();
+};
+
+function doAdd(lineDraw, lineData, idx, seriesScope) {
+  var itemLayout = lineData.getItemLayout(idx);
+
+  if (!lineNeedsDraw(itemLayout)) {
+    return;
+  }
+
+  var el = new lineDraw._ctor(lineData, idx, seriesScope);
+  lineData.setItemGraphicEl(idx, el);
+  lineDraw.group.add(el);
+}
+
+function doUpdate(lineDraw, oldLineData, newLineData, oldIdx, newIdx, seriesScope) {
+  var itemEl = oldLineData.getItemGraphicEl(oldIdx);
+
+  if (!lineNeedsDraw(newLineData.getItemLayout(newIdx))) {
+    lineDraw.group.remove(itemEl);
+    return;
+  }
+
+  if (!itemEl) {
+    itemEl = new lineDraw._ctor(newLineData, newIdx, seriesScope);
+  } else {
+    itemEl.updateData(newLineData, newIdx, seriesScope);
+  }
+
+  newLineData.setItemGraphicEl(newIdx, itemEl);
+  lineDraw.group.add(itemEl);
+}
+
+lineDrawProto.updateLayout = function () {
+  var lineData = this._lineData; // Do not support update layout in incremental mode.
+
+  if (!lineData) {
+    return;
+  }
+
+  lineData.eachItemGraphicEl(function (el, idx) {
+    el.updateLayout(lineData, idx);
+  }, this);
+};
+
+lineDrawProto.incrementalPrepareUpdate = function (lineData) {
+  this._seriesScope = makeSeriesScope$1(lineData);
+  this._lineData = null;
+  this.group.removeAll();
+};
+
+function isEffectObject(el) {
+  return el.animators && el.animators.length > 0;
+}
+
+lineDrawProto.incrementalUpdate = function (taskParams, lineData) {
+  function updateIncrementalAndHover(el) {
+    if (!el.isGroup && !isEffectObject(el)) {
+      el.incremental = el.useHoverLayer = true;
+    }
+  }
+
+  for (var idx = taskParams.start; idx < taskParams.end; idx++) {
+    var itemLayout = lineData.getItemLayout(idx);
+
+    if (lineNeedsDraw(itemLayout)) {
+      var el = new this._ctor(lineData, idx, this._seriesScope);
+      el.traverse(updateIncrementalAndHover);
+      this.group.add(el);
+      lineData.setItemGraphicEl(idx, el);
+    }
+  }
+};
+
+function makeSeriesScope$1(lineData) {
+  var hostModel = lineData.hostModel;
+  return {
+    lineStyle: hostModel.getModel('lineStyle').getLineStyle(),
+    hoverLineStyle: hostModel.getModel('emphasis.lineStyle').getLineStyle(),
+    labelModel: hostModel.getModel('label'),
+    hoverLabelModel: hostModel.getModel('emphasis.label')
+  };
+}
+
+lineDrawProto.remove = function () {
+  this._clearIncremental();
+
+  this._incremental = null;
+  this.group.removeAll();
+};
+
+lineDrawProto._clearIncremental = function () {
+  var incremental = this._incremental;
+
+  if (incremental) {
+    incremental.clearDisplaybles();
+  }
+};
+
+function isPointNaN(pt) {
+  return isNaN(pt[0]) || isNaN(pt[1]);
+}
+
+function lineNeedsDraw(pts) {
+  return !isPointNaN(pts[0]) && !isPointNaN(pts[1]);
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Provide effect for line
+ * @module echarts/chart/helper/EffectLine
+ */
+/**
+ * @constructor
+ * @extends {module:zrender/graphic/Group}
+ * @alias {module:echarts/chart/helper/Line}
+ */
+
+function EffectLine(lineData, idx, seriesScope) {
+  Group.call(this);
+  this.add(this.createLine(lineData, idx, seriesScope));
+
+  this._updateEffectSymbol(lineData, idx);
+}
+
+var effectLineProto = EffectLine.prototype;
+
+effectLineProto.createLine = function (lineData, idx, seriesScope) {
+  return new Line$1(lineData, idx, seriesScope);
+};
+
+effectLineProto._updateEffectSymbol = function (lineData, idx) {
+  var itemModel = lineData.getItemModel(idx);
+  var effectModel = itemModel.getModel('effect');
+  var size = effectModel.get('symbolSize');
+  var symbolType = effectModel.get('symbol');
+
+  if (!isArray(size)) {
+    size = [size, size];
+  }
+
+  var color = effectModel.get('color') || lineData.getItemVisual(idx, 'color');
+  var symbol = this.childAt(1);
+
+  if (this._symbolType !== symbolType) {
+    // Remove previous
+    this.remove(symbol);
+    symbol = createSymbol(symbolType, -0.5, -0.5, 1, 1, color);
+    symbol.z2 = 100;
+    symbol.culling = true;
+    this.add(symbol);
+  } // Symbol may be removed if loop is false
+
+
+  if (!symbol) {
+    return;
+  } // Shadow color is same with color in default
+
+
+  symbol.setStyle('shadowColor', color);
+  symbol.setStyle(effectModel.getItemStyle(['color']));
+  symbol.attr('scale', size);
+  symbol.setColor(color);
+  symbol.attr('scale', size);
+  this._symbolType = symbolType;
+  this._symbolScale = size;
+
+  this._updateEffectAnimation(lineData, effectModel, idx);
+};
+
+effectLineProto._updateEffectAnimation = function (lineData, effectModel, idx) {
+  var symbol = this.childAt(1);
+
+  if (!symbol) {
+    return;
+  }
+
+  var self = this;
+  var points = lineData.getItemLayout(idx);
+  var period = effectModel.get('period') * 1000;
+  var loop = effectModel.get('loop');
+  var constantSpeed = effectModel.get('constantSpeed');
+  var delayExpr = retrieve(effectModel.get('delay'), function (idx) {
+    return idx / lineData.count() * period / 3;
+  });
+  var isDelayFunc = typeof delayExpr === 'function'; // Ignore when updating
+
+  symbol.ignore = true;
+  this.updateAnimationPoints(symbol, points);
+
+  if (constantSpeed > 0) {
+    period = this.getLineLength(symbol) / constantSpeed * 1000;
+  }
+
+  if (period !== this._period || loop !== this._loop) {
+    symbol.stopAnimation();
+    var delay = delayExpr;
+
+    if (isDelayFunc) {
+      delay = delayExpr(idx);
+    }
+
+    if (symbol.__t > 0) {
+      delay = -period * symbol.__t;
+    }
+
+    symbol.__t = 0;
+    var animator = symbol.animate('', loop).when(period, {
+      __t: 1
+    }).delay(delay).during(function () {
+      self.updateSymbolPosition(symbol);
+    });
+
+    if (!loop) {
+      animator.done(function () {
+        self.remove(symbol);
+      });
+    }
+
+    animator.start();
+  }
+
+  this._period = period;
+  this._loop = loop;
+};
+
+effectLineProto.getLineLength = function (symbol) {
+  // Not so accurate
+  return dist(symbol.__p1, symbol.__cp1) + dist(symbol.__cp1, symbol.__p2);
+};
+
+effectLineProto.updateAnimationPoints = function (symbol, points) {
+  symbol.__p1 = points[0];
+  symbol.__p2 = points[1];
+  symbol.__cp1 = points[2] || [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2];
+};
+
+effectLineProto.updateData = function (lineData, idx, seriesScope) {
+  this.childAt(0).updateData(lineData, idx, seriesScope);
+
+  this._updateEffectSymbol(lineData, idx);
+};
+
+effectLineProto.updateSymbolPosition = function (symbol) {
+  var p1 = symbol.__p1;
+  var p2 = symbol.__p2;
+  var cp1 = symbol.__cp1;
+  var t = symbol.__t;
+  var pos = symbol.position;
+  var lastPos = [pos[0], pos[1]];
+  var quadraticAt$$1 = quadraticAt;
+  var quadraticDerivativeAt$$1 = quadraticDerivativeAt;
+  pos[0] = quadraticAt$$1(p1[0], cp1[0], p2[0], t);
+  pos[1] = quadraticAt$$1(p1[1], cp1[1], p2[1], t); // Tangent
+
+  var tx = quadraticDerivativeAt$$1(p1[0], cp1[0], p2[0], t);
+  var ty = quadraticDerivativeAt$$1(p1[1], cp1[1], p2[1], t);
+  symbol.rotation = -Math.atan2(ty, tx) - Math.PI / 2; // enable continuity trail for 'line', 'rect', 'roundRect' symbolType
+
+  if (this._symbolType === 'line' || this._symbolType === 'rect' || this._symbolType === 'roundRect') {
+    if (symbol.__lastT !== undefined && symbol.__lastT < symbol.__t) {
+      var scaleY = dist(lastPos, pos) * 1.05;
+      symbol.attr('scale', [symbol.scale[0], scaleY]); // make sure the last segment render within endPoint
+
+      if (t === 1) {
+        pos[0] = lastPos[0] + (pos[0] - lastPos[0]) / 2;
+        pos[1] = lastPos[1] + (pos[1] - lastPos[1]) / 2;
+      }
+    } else if (symbol.__lastT === 1) {
+      // After first loop, symbol.__t does NOT start with 0, so connect p1 to pos directly.
+      var scaleY = 2 * dist(p1, pos);
+      symbol.attr('scale', [symbol.scale[0], scaleY]);
+    } else {
+      symbol.attr('scale', this._symbolScale);
+    }
+  }
+
+  symbol.__lastT = symbol.__t;
+  symbol.ignore = false;
+};
+
+effectLineProto.updateLayout = function (lineData, idx) {
+  this.childAt(0).updateLayout(lineData, idx);
+  var effectModel = lineData.getItemModel(idx).getModel('effect');
+
+  this._updateEffectAnimation(lineData, effectModel, idx);
+};
+
+inherits(EffectLine, Group);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @module echarts/chart/helper/Line
+ */
+/**
+ * @constructor
+ * @extends {module:zrender/graphic/Group}
+ * @alias {module:echarts/chart/helper/Polyline}
+ */
+
+function Polyline$2(lineData, idx, seriesScope) {
+  Group.call(this);
+
+  this._createPolyline(lineData, idx, seriesScope);
+}
+
+var polylineProto = Polyline$2.prototype;
+
+polylineProto._createPolyline = function (lineData, idx, seriesScope) {
+  // var seriesModel = lineData.hostModel;
+  var points = lineData.getItemLayout(idx);
+  var line = new Polyline({
+    shape: {
+      points: points
+    }
+  });
+  this.add(line);
+
+  this._updateCommonStl(lineData, idx, seriesScope);
+};
+
+polylineProto.updateData = function (lineData, idx, seriesScope) {
+  var seriesModel = lineData.hostModel;
+  var line = this.childAt(0);
+  var target = {
+    shape: {
+      points: lineData.getItemLayout(idx)
+    }
+  };
+  updateProps(line, target, seriesModel, idx);
+
+  this._updateCommonStl(lineData, idx, seriesScope);
+};
+
+polylineProto._updateCommonStl = function (lineData, idx, seriesScope) {
+  var line = this.childAt(0);
+  var itemModel = lineData.getItemModel(idx);
+  var visualColor = lineData.getItemVisual(idx, 'color');
+  var lineStyle = seriesScope && seriesScope.lineStyle;
+  var hoverLineStyle = seriesScope && seriesScope.hoverLineStyle;
+
+  if (!seriesScope || lineData.hasItemOption) {
+    lineStyle = itemModel.getModel('lineStyle').getLineStyle();
+    hoverLineStyle = itemModel.getModel('emphasis.lineStyle').getLineStyle();
+  }
+
+  line.useStyle(defaults({
+    strokeNoScale: true,
+    fill: 'none',
+    stroke: visualColor
+  }, lineStyle));
+  line.hoverStyle = hoverLineStyle;
+  setHoverStyle(this);
+};
+
+polylineProto.updateLayout = function (lineData, idx) {
+  var polyline = this.childAt(0);
+  polyline.setShape('points', lineData.getItemLayout(idx));
+};
+
+inherits(Polyline$2, Group);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * Provide effect for line
+ * @module echarts/chart/helper/EffectLine
+ */
+/**
+ * @constructor
+ * @extends {module:echarts/chart/helper/EffectLine}
+ * @alias {module:echarts/chart/helper/Polyline}
+ */
+
+function EffectPolyline(lineData, idx, seriesScope) {
+  EffectLine.call(this, lineData, idx, seriesScope);
+  this._lastFrame = 0;
+  this._lastFramePercent = 0;
+}
+
+var effectPolylineProto = EffectPolyline.prototype; // Overwrite
+
+effectPolylineProto.createLine = function (lineData, idx, seriesScope) {
+  return new Polyline$2(lineData, idx, seriesScope);
+}; // Overwrite
+
+
+effectPolylineProto.updateAnimationPoints = function (symbol, points) {
+  this._points = points;
+  var accLenArr = [0];
+  var len$$1 = 0;
+
+  for (var i = 1; i < points.length; i++) {
+    var p1 = points[i - 1];
+    var p2 = points[i];
+    len$$1 += dist(p1, p2);
+    accLenArr.push(len$$1);
+  }
+
+  if (len$$1 === 0) {
+    return;
+  }
+
+  for (var i = 0; i < accLenArr.length; i++) {
+    accLenArr[i] /= len$$1;
+  }
+
+  this._offsets = accLenArr;
+  this._length = len$$1;
+}; // Overwrite
+
+
+effectPolylineProto.getLineLength = function (symbol) {
+  return this._length;
+}; // Overwrite
+
+
+effectPolylineProto.updateSymbolPosition = function (symbol) {
+  var t = symbol.__t;
+  var points = this._points;
+  var offsets = this._offsets;
+  var len$$1 = points.length;
+
+  if (!offsets) {
+    // Has length 0
+    return;
+  }
+
+  var lastFrame = this._lastFrame;
+  var frame;
+
+  if (t < this._lastFramePercent) {
+    // Start from the next frame
+    // PENDING start from lastFrame ?
+    var start = Math.min(lastFrame + 1, len$$1 - 1);
+
+    for (frame = start; frame >= 0; frame--) {
+      if (offsets[frame] <= t) {
+        break;
+      }
+    } // PENDING really need to do this ?
+
+
+    frame = Math.min(frame, len$$1 - 2);
+  } else {
+    for (var frame = lastFrame; frame < len$$1; frame++) {
+      if (offsets[frame] > t) {
+        break;
+      }
+    }
+
+    frame = Math.min(frame - 1, len$$1 - 2);
+  }
+
+  lerp(symbol.position, points[frame], points[frame + 1], (t - offsets[frame]) / (offsets[frame + 1] - offsets[frame]));
+  var tx = points[frame + 1][0] - points[frame][0];
+  var ty = points[frame + 1][1] - points[frame][1];
+  symbol.rotation = -Math.atan2(ty, tx) - Math.PI / 2;
+  this._lastFrame = frame;
+  this._lastFramePercent = t;
+  symbol.ignore = false;
+};
+
+inherits(EffectPolyline, EffectLine);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// TODO Batch by color
+var LargeLineShape = extendShape({
+  shape: {
+    polyline: false,
+    curveness: 0,
+    segs: []
+  },
+  buildPath: function (path, shape) {
+    var segs = shape.segs;
+    var curveness = shape.curveness;
+
+    if (shape.polyline) {
+      for (var i = 0; i < segs.length;) {
+        var count = segs[i++];
+
+        if (count > 0) {
+          path.moveTo(segs[i++], segs[i++]);
+
+          for (var k = 1; k < count; k++) {
+            path.lineTo(segs[i++], segs[i++]);
+          }
+        }
+      }
+    } else {
+      for (var i = 0; i < segs.length;) {
+        var x0 = segs[i++];
+        var y0 = segs[i++];
+        var x1 = segs[i++];
+        var y1 = segs[i++];
+        path.moveTo(x0, y0);
+
+        if (curveness > 0) {
+          var x2 = (x0 + x1) / 2 - (y0 - y1) * curveness;
+          var y2 = (y0 + y1) / 2 - (x1 - x0) * curveness;
+          path.quadraticCurveTo(x2, y2, x1, y1);
+        } else {
+          path.lineTo(x1, y1);
+        }
+      }
+    }
+  },
+  findDataIndex: function (x, y) {
+    var shape = this.shape;
+    var segs = shape.segs;
+    var curveness = shape.curveness;
+
+    if (shape.polyline) {
+      var dataIndex = 0;
+
+      for (var i = 0; i < segs.length;) {
+        var count = segs[i++];
+
+        if (count > 0) {
+          var x0 = segs[i++];
+          var y0 = segs[i++];
+
+          for (var k = 1; k < count; k++) {
+            var x1 = segs[i++];
+            var y1 = segs[i++];
+
+            if (containStroke$1(x0, y0, x1, y1)) {
+              return dataIndex;
+            }
+          }
+        }
+
+        dataIndex++;
+      }
+    } else {
+      var dataIndex = 0;
+
+      for (var i = 0; i < segs.length;) {
+        var x0 = segs[i++];
+        var y0 = segs[i++];
+        var x1 = segs[i++];
+        var y1 = segs[i++];
+
+        if (curveness > 0) {
+          var x2 = (x0 + x1) / 2 - (y0 - y1) * curveness;
+          var y2 = (y0 + y1) / 2 - (x1 - x0) * curveness;
+
+          if (containStroke$3(x0, y0, x2, y2, x1, y1)) {
+            return dataIndex;
+          }
+        } else {
+          if (containStroke$1(x0, y0, x1, y1)) {
+            return dataIndex;
+          }
+        }
+
+        dataIndex++;
+      }
+    }
+
+    return -1;
+  }
+});
+
+function LargeLineDraw() {
+  this.group = new Group();
+}
+
+var largeLineProto = LargeLineDraw.prototype;
+
+largeLineProto.isPersistent = function () {
+  return !this._incremental;
+};
+/**
+ * Update symbols draw by new data
+ * @param {module:echarts/data/List} data
+ */
+
+
+largeLineProto.updateData = function (data) {
+  this.group.removeAll();
+  var lineEl = new LargeLineShape({
+    rectHover: true,
+    cursor: 'default'
+  });
+  lineEl.setShape({
+    segs: data.getLayout('linesPoints')
+  });
+
+  this._setCommon(lineEl, data); // Add back
+
+
+  this.group.add(lineEl);
+  this._incremental = null;
+};
+/**
+ * @override
+ */
+
+
+largeLineProto.incrementalPrepareUpdate = function (data) {
+  this.group.removeAll();
+
+  this._clearIncremental();
+
+  if (data.count() > 5e5) {
+    if (!this._incremental) {
+      this._incremental = new IncrementalDisplayble({
+        silent: true
+      });
+    }
+
+    this.group.add(this._incremental);
+  } else {
+    this._incremental = null;
+  }
+};
+/**
+ * @override
+ */
+
+
+largeLineProto.incrementalUpdate = function (taskParams, data) {
+  var lineEl = new LargeLineShape();
+  lineEl.setShape({
+    segs: data.getLayout('linesPoints')
+  });
+
+  this._setCommon(lineEl, data, !!this._incremental);
+
+  if (!this._incremental) {
+    lineEl.rectHover = true;
+    lineEl.cursor = 'default';
+    lineEl.__startIndex = taskParams.start;
+    this.group.add(lineEl);
+  } else {
+    this._incremental.addDisplayable(lineEl, true);
+  }
+};
+/**
+ * @override
+ */
+
+
+largeLineProto.remove = function () {
+  this._clearIncremental();
+
+  this._incremental = null;
+  this.group.removeAll();
+};
+
+largeLineProto._setCommon = function (lineEl, data, isIncremental) {
+  var hostModel = data.hostModel;
+  lineEl.setShape({
+    polyline: hostModel.get('polyline'),
+    curveness: hostModel.get('lineStyle.curveness')
+  });
+  lineEl.useStyle(hostModel.getModel('lineStyle').getLineStyle());
+  lineEl.style.strokeNoScale = true;
+  var visualColor = data.getVisual('color');
+
+  if (visualColor) {
+    lineEl.setStyle('stroke', visualColor);
+  }
+
+  lineEl.setStyle('fill');
+
+  if (!isIncremental) {
+    // Enable tooltip
+    // PENDING May have performance issue when path is extremely large
+    lineEl.seriesIndex = hostModel.seriesIndex;
+    lineEl.on('mousemove', function (e) {
+      lineEl.dataIndex = null;
+      var dataIndex = lineEl.findDataIndex(e.offsetX, e.offsetY);
+
+      if (dataIndex > 0) {
+        // Provide dataIndex for tooltip
+        lineEl.dataIndex = dataIndex + lineEl.__startIndex;
+      }
+    });
+  }
+};
+
+largeLineProto._clearIncremental = function () {
+  var incremental = this._incremental;
+
+  if (incremental) {
+    incremental.clearDisplaybles();
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/* global Float32Array */
+var linesLayout = {
+  seriesType: 'lines',
+  plan: createRenderPlanner(),
+  reset: function (seriesModel) {
+    var coordSys = seriesModel.coordinateSystem;
+    var isPolyline = seriesModel.get('polyline');
+    var isLarge = seriesModel.pipelineContext.large;
+
+    function progress(params, lineData) {
+      var lineCoords = [];
+
+      if (isLarge) {
+        var points;
+        var segCount = params.end - params.start;
+
+        if (isPolyline) {
+          var totalCoordsCount = 0;
+
+          for (var i = params.start; i < params.end; i++) {
+            totalCoordsCount += seriesModel.getLineCoordsCount(i);
+          }
+
+          points = new Float32Array(segCount + totalCoordsCount * 2);
+        } else {
+          points = new Float32Array(segCount * 4);
+        }
+
+        var offset = 0;
+        var pt = [];
+
+        for (var i = params.start; i < params.end; i++) {
+          var len = seriesModel.getLineCoords(i, lineCoords);
+
+          if (isPolyline) {
+            points[offset++] = len;
+          }
+
+          for (var k = 0; k < len; k++) {
+            pt = coordSys.dataToPoint(lineCoords[k], false, pt);
+            points[offset++] = pt[0];
+            points[offset++] = pt[1];
+          }
+        }
+
+        lineData.setLayout('linesPoints', points);
+      } else {
+        for (var i = params.start; i < params.end; i++) {
+          var itemModel = lineData.getItemModel(i);
+          var len = seriesModel.getLineCoords(i, lineCoords);
+          var pts = [];
+
+          if (isPolyline) {
+            for (var j = 0; j < len; j++) {
+              pts.push(coordSys.dataToPoint(lineCoords[j]));
+            }
+          } else {
+            pts[0] = coordSys.dataToPoint(lineCoords[0]);
+            pts[1] = coordSys.dataToPoint(lineCoords[1]);
+            var curveness = itemModel.get('lineStyle.curveness');
+
+            if (+curveness) {
+              pts[2] = [(pts[0][0] + pts[1][0]) / 2 - (pts[0][1] - pts[1][1]) * curveness, (pts[0][1] + pts[1][1]) / 2 - (pts[1][0] - pts[0][0]) * curveness];
+            }
+          }
+
+          lineData.setItemLayout(i, pts);
+        }
+      }
+    }
+
+    return {
+      progress: progress
+    };
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+extendChartView({
+  type: 'lines',
+  init: function () {},
+  render: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+
+    var lineDraw = this._updateLineDraw(data, seriesModel);
+
+    var zlevel = seriesModel.get('zlevel');
+    var trailLength = seriesModel.get('effect.trailLength');
+    var zr = api.getZr(); // Avoid the drag cause ghost shadow
+    // FIXME Better way ?
+    // SVG doesn't support
+
+    var isSvg = zr.painter.getType() === 'svg';
+
+    if (!isSvg) {
+      zr.painter.getLayer(zlevel).clear(true);
+    } // Config layer with motion blur
+
+
+    if (this._lastZlevel != null && !isSvg) {
+      zr.configLayer(this._lastZlevel, {
+        motionBlur: false
+      });
+    }
+
+    if (this._showEffect(seriesModel) && trailLength) {
+      if (!isSvg) {
+        zr.configLayer(zlevel, {
+          motionBlur: true,
+          lastFrameAlpha: Math.max(Math.min(trailLength / 10 + 0.9, 1), 0)
+        });
+      }
+    }
+
+    lineDraw.updateData(data);
+    var clipPath = seriesModel.get('clip', true) && createClipPath(seriesModel.coordinateSystem, false, seriesModel);
+
+    if (clipPath) {
+      this.group.setClipPath(clipPath);
+    } else {
+      this.group.removeClipPath();
+    }
+
+    this._lastZlevel = zlevel;
+    this._finished = true;
+  },
+  incrementalPrepareRender: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+
+    var lineDraw = this._updateLineDraw(data, seriesModel);
+
+    lineDraw.incrementalPrepareUpdate(data);
+
+    this._clearLayer(api);
+
+    this._finished = false;
+  },
+  incrementalRender: function (taskParams, seriesModel, ecModel) {
+    this._lineDraw.incrementalUpdate(taskParams, seriesModel.getData());
+
+    this._finished = taskParams.end === seriesModel.getData().count();
+  },
+  updateTransform: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+    var pipelineContext = seriesModel.pipelineContext;
+
+    if (!this._finished || pipelineContext.large || pipelineContext.progressiveRender) {
+      // TODO Don't have to do update in large mode. Only do it when there are millions of data.
+      return {
+        update: true
+      };
+    } else {
+      // TODO Use same logic with ScatterView.
+      // Manually update layout
+      var res = linesLayout.reset(seriesModel);
+
+      if (res.progress) {
+        res.progress({
+          start: 0,
+          end: data.count()
+        }, data);
+      }
+
+      this._lineDraw.updateLayout();
+
+      this._clearLayer(api);
+    }
+  },
+  _updateLineDraw: function (data, seriesModel) {
+    var lineDraw = this._lineDraw;
+
+    var hasEffect = this._showEffect(seriesModel);
+
+    var isPolyline = !!seriesModel.get('polyline');
+    var pipelineContext = seriesModel.pipelineContext;
+    var isLargeDraw = pipelineContext.large;
+
+    if (!lineDraw || hasEffect !== this._hasEffet || isPolyline !== this._isPolyline || isLargeDraw !== this._isLargeDraw) {
+      if (lineDraw) {
+        lineDraw.remove();
+      }
+
+      lineDraw = this._lineDraw = isLargeDraw ? new LargeLineDraw() : new LineDraw(isPolyline ? hasEffect ? EffectPolyline : Polyline$2 : hasEffect ? EffectLine : Line$1);
+      this._hasEffet = hasEffect;
+      this._isPolyline = isPolyline;
+      this._isLargeDraw = isLargeDraw;
+      this.group.removeAll();
+    }
+
+    this.group.add(lineDraw.group);
+    return lineDraw;
+  },
+  _showEffect: function (seriesModel) {
+    return !!seriesModel.get('effect.show');
+  },
+  _clearLayer: function (api) {
+    // Not use motion when dragging or zooming
+    var zr = api.getZr();
+    var isSvg = zr.painter.getType() === 'svg';
+
+    if (!isSvg && this._lastZlevel != null) {
+      zr.painter.getLayer(this._lastZlevel).clear(true);
+    }
+  },
+  remove: function (ecModel, api) {
+    this._lineDraw && this._lineDraw.remove();
+    this._lineDraw = null; // Clear motion when lineDraw is removed
+
+    this._clearLayer(api);
+  },
+  dispose: function () {}
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function normalize$1(a) {
+  if (!(a instanceof Array)) {
+    a = [a, a];
+  }
+
+  return a;
+}
+
+var opacityQuery = 'lineStyle.opacity'.split('.');
+var linesVisual = {
+  seriesType: 'lines',
+  reset: function (seriesModel, ecModel, api) {
+    var symbolType = normalize$1(seriesModel.get('symbol'));
+    var symbolSize = normalize$1(seriesModel.get('symbolSize'));
+    var data = seriesModel.getData();
+    data.setVisual('fromSymbol', symbolType && symbolType[0]);
+    data.setVisual('toSymbol', symbolType && symbolType[1]);
+    data.setVisual('fromSymbolSize', symbolSize && symbolSize[0]);
+    data.setVisual('toSymbolSize', symbolSize && symbolSize[1]);
+    data.setVisual('opacity', seriesModel.get(opacityQuery));
+
+    function dataEach(data, idx) {
+      var itemModel = data.getItemModel(idx);
+      var symbolType = normalize$1(itemModel.getShallow('symbol', true));
+      var symbolSize = normalize$1(itemModel.getShallow('symbolSize', true));
+      var opacity = itemModel.get(opacityQuery);
+      symbolType[0] && data.setItemVisual(idx, 'fromSymbol', symbolType[0]);
+      symbolType[1] && data.setItemVisual(idx, 'toSymbol', symbolType[1]);
+      symbolSize[0] && data.setItemVisual(idx, 'fromSymbolSize', symbolSize[0]);
+      symbolSize[1] && data.setItemVisual(idx, 'toSymbolSize', symbolSize[1]);
+      data.setItemVisual(idx, 'opacity', opacity);
+    }
+
+    return {
+      dataEach: data.hasItemOption ? dataEach : null
+    };
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerLayout(linesLayout);
+registerVisual(linesVisual);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var GaugeSeries = SeriesModel.extend({
+  type: 'series.gauge',
+  getInitialData: function (option, ecModel) {
+    return createListSimply(this, ['value']);
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 2,
+    // 默认全局居中
+    center: ['50%', '50%'],
+    legendHoverLink: true,
+    radius: '75%',
+    startAngle: 225,
+    endAngle: -45,
+    clockwise: true,
+    // 最小值
+    min: 0,
+    // 最大值
+    max: 100,
+    // 分割段数，默认为10
+    splitNumber: 10,
+    // 坐标轴线
+    axisLine: {
+      // 默认显示，属性show控制显示与否
+      show: true,
+      lineStyle: {
+        // 属性lineStyle控制线条样式
+        color: [[0.2, '#91c7ae'], [0.8, '#63869e'], [1, '#c23531']],
+        width: 30
+      }
+    },
+    // 分隔线
+    splitLine: {
+      // 默认显示，属性show控制显示与否
+      show: true,
+      // 属性length控制线长
+      length: 30,
+      // 属性lineStyle（详见lineStyle）控制线条样式
+      lineStyle: {
+        color: '#eee',
+        width: 2,
+        type: 'solid'
+      }
+    },
+    // 坐标轴小标记
+    axisTick: {
+      // 属性show控制显示与否，默认不显示
+      show: true,
+      // 每份split细分多少段
+      splitNumber: 5,
+      // 属性length控制线长
+      length: 8,
+      // 属性lineStyle控制线条样式
+      lineStyle: {
+        color: '#eee',
+        width: 1,
+        type: 'solid'
+      }
+    },
+    axisLabel: {
+      show: true,
+      distance: 5,
+      // formatter: null,
+      color: 'auto'
+    },
+    pointer: {
+      show: true,
+      length: '80%',
+      width: 8
+    },
+    itemStyle: {
+      color: 'auto'
+    },
+    title: {
+      show: true,
+      // x, y，单位px
+      offsetCenter: [0, '-40%'],
+      // 其余属性默认使用全局文本样式，详见TEXTSTYLE
+      color: '#333',
+      fontSize: 15
+    },
+    detail: {
+      show: true,
+      backgroundColor: 'rgba(0,0,0,0)',
+      borderWidth: 0,
+      borderColor: '#ccc',
+      width: 100,
+      height: null,
+      // self-adaption
+      padding: [5, 10],
+      // x, y，单位px
+      offsetCenter: [0, '40%'],
+      // formatter: null,
+      // 其余属性默认使用全局文本样式，详见TEXTSTYLE
+      color: 'auto',
+      fontSize: 30
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var PointerPath = Path.extend({
+  type: 'echartsGaugePointer',
+  shape: {
+    angle: 0,
+    width: 10,
+    r: 10,
+    x: 0,
+    y: 0
+  },
+  buildPath: function (ctx, shape) {
+    var mathCos = Math.cos;
+    var mathSin = Math.sin;
+    var r = shape.r;
+    var width = shape.width;
+    var angle = shape.angle;
+    var x = shape.x - mathCos(angle) * width * (width >= r / 3 ? 1 : 2);
+    var y = shape.y - mathSin(angle) * width * (width >= r / 3 ? 1 : 2);
+    angle = shape.angle - Math.PI / 2;
+    ctx.moveTo(x, y);
+    ctx.lineTo(shape.x + mathCos(angle) * width, shape.y + mathSin(angle) * width);
+    ctx.lineTo(shape.x + mathCos(shape.angle) * r, shape.y + mathSin(shape.angle) * r);
+    ctx.lineTo(shape.x - mathCos(angle) * width, shape.y - mathSin(angle) * width);
+    ctx.lineTo(x, y);
+    return;
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function parsePosition(seriesModel, api) {
+  var center = seriesModel.get('center');
+  var width = api.getWidth();
+  var height = api.getHeight();
+  var size = Math.min(width, height);
+  var cx = parsePercent$1(center[0], api.getWidth());
+  var cy = parsePercent$1(center[1], api.getHeight());
+  var r = parsePercent$1(seriesModel.get('radius'), size / 2);
+  return {
+    cx: cx,
+    cy: cy,
+    r: r
+  };
+}
+
+function formatLabel(label, labelFormatter) {
+  if (labelFormatter) {
+    if (typeof labelFormatter === 'string') {
+      label = labelFormatter.replace('{value}', label != null ? label : '');
+    } else if (typeof labelFormatter === 'function') {
+      label = labelFormatter(label);
+    }
+  }
+
+  return label;
+}
+
+var PI2$5 = Math.PI * 2;
+var GaugeView = Chart.extend({
+  type: 'gauge',
+  render: function (seriesModel, ecModel, api) {
+    this.group.removeAll();
+    var colorList = seriesModel.get('axisLine.lineStyle.color');
+    var posInfo = parsePosition(seriesModel, api);
+
+    this._renderMain(seriesModel, ecModel, api, colorList, posInfo);
+  },
+  dispose: function () {},
+  _renderMain: function (seriesModel, ecModel, api, colorList, posInfo) {
+    var group = this.group;
+    var axisLineModel = seriesModel.getModel('axisLine');
+    var lineStyleModel = axisLineModel.getModel('lineStyle');
+    var clockwise = seriesModel.get('clockwise');
+    var startAngle = -seriesModel.get('startAngle') / 180 * Math.PI;
+    var endAngle = -seriesModel.get('endAngle') / 180 * Math.PI;
+    var angleRangeSpan = (endAngle - startAngle) % PI2$5;
+    var prevEndAngle = startAngle;
+    var axisLineWidth = lineStyleModel.get('width');
+    var showAxis = axisLineModel.get('show');
+
+    for (var i = 0; showAxis && i < colorList.length; i++) {
+      // Clamp
+      var percent = Math.min(Math.max(colorList[i][0], 0), 1);
+      var endAngle = startAngle + angleRangeSpan * percent;
+      var sector = new Sector({
+        shape: {
+          startAngle: prevEndAngle,
+          endAngle: endAngle,
+          cx: posInfo.cx,
+          cy: posInfo.cy,
+          clockwise: clockwise,
+          r0: posInfo.r - axisLineWidth,
+          r: posInfo.r
+        },
+        silent: true
+      });
+      sector.setStyle({
+        fill: colorList[i][1]
+      });
+      sector.setStyle(lineStyleModel.getLineStyle( // Because we use sector to simulate arc
+      // so the properties for stroking are useless
+      ['color', 'borderWidth', 'borderColor']));
+      group.add(sector);
+      prevEndAngle = endAngle;
+    }
+
+    var getColor = function (percent) {
+      // Less than 0
+      if (percent <= 0) {
+        return colorList[0][1];
+      }
+
+      for (var i = 0; i < colorList.length; i++) {
+        if (colorList[i][0] >= percent && (i === 0 ? 0 : colorList[i - 1][0]) < percent) {
+          return colorList[i][1];
+        }
+      } // More than 1
+
+
+      return colorList[i - 1][1];
+    };
+
+    if (!clockwise) {
+      var tmp = startAngle;
+      startAngle = endAngle;
+      endAngle = tmp;
+    }
+
+    this._renderTicks(seriesModel, ecModel, api, getColor, posInfo, startAngle, endAngle, clockwise);
+
+    this._renderPointer(seriesModel, ecModel, api, getColor, posInfo, startAngle, endAngle, clockwise);
+
+    this._renderTitle(seriesModel, ecModel, api, getColor, posInfo);
+
+    this._renderDetail(seriesModel, ecModel, api, getColor, posInfo);
+  },
+  _renderTicks: function (seriesModel, ecModel, api, getColor, posInfo, startAngle, endAngle, clockwise) {
+    var group = this.group;
+    var cx = posInfo.cx;
+    var cy = posInfo.cy;
+    var r = posInfo.r;
+    var minVal = +seriesModel.get('min');
+    var maxVal = +seriesModel.get('max');
+    var splitLineModel = seriesModel.getModel('splitLine');
+    var tickModel = seriesModel.getModel('axisTick');
+    var labelModel = seriesModel.getModel('axisLabel');
+    var splitNumber = seriesModel.get('splitNumber');
+    var subSplitNumber = tickModel.get('splitNumber');
+    var splitLineLen = parsePercent$1(splitLineModel.get('length'), r);
+    var tickLen = parsePercent$1(tickModel.get('length'), r);
+    var angle = startAngle;
+    var step = (endAngle - startAngle) / splitNumber;
+    var subStep = step / subSplitNumber;
+    var splitLineStyle = splitLineModel.getModel('lineStyle').getLineStyle();
+    var tickLineStyle = tickModel.getModel('lineStyle').getLineStyle();
+
+    for (var i = 0; i <= splitNumber; i++) {
+      var unitX = Math.cos(angle);
+      var unitY = Math.sin(angle); // Split line
+
+      if (splitLineModel.get('show')) {
+        var splitLine = new Line({
+          shape: {
+            x1: unitX * r + cx,
+            y1: unitY * r + cy,
+            x2: unitX * (r - splitLineLen) + cx,
+            y2: unitY * (r - splitLineLen) + cy
+          },
+          style: splitLineStyle,
+          silent: true
+        });
+
+        if (splitLineStyle.stroke === 'auto') {
+          splitLine.setStyle({
+            stroke: getColor(i / splitNumber)
+          });
+        }
+
+        group.add(splitLine);
+      } // Label
+
+
+      if (labelModel.get('show')) {
+        var label = formatLabel(round$1(i / splitNumber * (maxVal - minVal) + minVal), labelModel.get('formatter'));
+        var distance = labelModel.get('distance');
+        var autoColor = getColor(i / splitNumber);
+        group.add(new Text({
+          style: setTextStyle({}, labelModel, {
+            text: label,
+            x: unitX * (r - splitLineLen - distance) + cx,
+            y: unitY * (r - splitLineLen - distance) + cy,
+            textVerticalAlign: unitY < -0.4 ? 'top' : unitY > 0.4 ? 'bottom' : 'middle',
+            textAlign: unitX < -0.4 ? 'left' : unitX > 0.4 ? 'right' : 'center'
+          }, {
+            autoColor: autoColor
+          }),
+          silent: true
+        }));
+      } // Axis tick
+
+
+      if (tickModel.get('show') && i !== splitNumber) {
+        for (var j = 0; j <= subSplitNumber; j++) {
+          var unitX = Math.cos(angle);
+          var unitY = Math.sin(angle);
+          var tickLine = new Line({
+            shape: {
+              x1: unitX * r + cx,
+              y1: unitY * r + cy,
+              x2: unitX * (r - tickLen) + cx,
+              y2: unitY * (r - tickLen) + cy
+            },
+            silent: true,
+            style: tickLineStyle
+          });
+
+          if (tickLineStyle.stroke === 'auto') {
+            tickLine.setStyle({
+              stroke: getColor((i + j / subSplitNumber) / splitNumber)
+            });
+          }
+
+          group.add(tickLine);
+          angle += subStep;
+        }
+
+        angle -= subStep;
+      } else {
+        angle += step;
+      }
+    }
+  },
+  _renderPointer: function (seriesModel, ecModel, api, getColor, posInfo, startAngle, endAngle, clockwise) {
+    var group = this.group;
+    var oldData = this._data;
+
+    if (!seriesModel.get('pointer.show')) {
+      // Remove old element
+      oldData && oldData.eachItemGraphicEl(function (el) {
+        group.remove(el);
+      });
+      return;
+    }
+
+    var valueExtent = [+seriesModel.get('min'), +seriesModel.get('max')];
+    var angleExtent = [startAngle, endAngle];
+    var data = seriesModel.getData();
+    var valueDim = data.mapDimension('value');
+    data.diff(oldData).add(function (idx) {
+      var pointer = new PointerPath({
+        shape: {
+          angle: startAngle
+        }
+      });
+      initProps(pointer, {
+        shape: {
+          angle: linearMap(data.get(valueDim, idx), valueExtent, angleExtent, true)
+        }
+      }, seriesModel);
+      group.add(pointer);
+      data.setItemGraphicEl(idx, pointer);
+    }).update(function (newIdx, oldIdx) {
+      var pointer = oldData.getItemGraphicEl(oldIdx);
+      updateProps(pointer, {
+        shape: {
+          angle: linearMap(data.get(valueDim, newIdx), valueExtent, angleExtent, true)
+        }
+      }, seriesModel);
+      group.add(pointer);
+      data.setItemGraphicEl(newIdx, pointer);
+    }).remove(function (idx) {
+      var pointer = oldData.getItemGraphicEl(idx);
+      group.remove(pointer);
+    }).execute();
+    data.eachItemGraphicEl(function (pointer, idx) {
+      var itemModel = data.getItemModel(idx);
+      var pointerModel = itemModel.getModel('pointer');
+      pointer.setShape({
+        x: posInfo.cx,
+        y: posInfo.cy,
+        width: parsePercent$1(pointerModel.get('width'), posInfo.r),
+        r: parsePercent$1(pointerModel.get('length'), posInfo.r)
+      });
+      pointer.useStyle(itemModel.getModel('itemStyle').getItemStyle());
+
+      if (pointer.style.fill === 'auto') {
+        pointer.setStyle('fill', getColor(linearMap(data.get(valueDim, idx), valueExtent, [0, 1], true)));
+      }
+
+      setHoverStyle(pointer, itemModel.getModel('emphasis.itemStyle').getItemStyle());
+    });
+    this._data = data;
+  },
+  _renderTitle: function (seriesModel, ecModel, api, getColor, posInfo) {
+    var data = seriesModel.getData();
+    var valueDim = data.mapDimension('value');
+    var titleModel = seriesModel.getModel('title');
+
+    if (titleModel.get('show')) {
+      var offsetCenter = titleModel.get('offsetCenter');
+      var x = posInfo.cx + parsePercent$1(offsetCenter[0], posInfo.r);
+      var y = posInfo.cy + parsePercent$1(offsetCenter[1], posInfo.r);
+      var minVal = +seriesModel.get('min');
+      var maxVal = +seriesModel.get('max');
+      var value = seriesModel.getData().get(valueDim, 0);
+      var autoColor = getColor(linearMap(value, [minVal, maxVal], [0, 1], true));
+      this.group.add(new Text({
+        silent: true,
+        style: setTextStyle({}, titleModel, {
+          x: x,
+          y: y,
+          // FIXME First data name ?
+          text: data.getName(0),
+          textAlign: 'center',
+          textVerticalAlign: 'middle'
+        }, {
+          autoColor: autoColor,
+          forceRich: true
+        })
+      }));
+    }
+  },
+  _renderDetail: function (seriesModel, ecModel, api, getColor, posInfo) {
+    var detailModel = seriesModel.getModel('detail');
+    var minVal = +seriesModel.get('min');
+    var maxVal = +seriesModel.get('max');
+
+    if (detailModel.get('show')) {
+      var offsetCenter = detailModel.get('offsetCenter');
+      var x = posInfo.cx + parsePercent$1(offsetCenter[0], posInfo.r);
+      var y = posInfo.cy + parsePercent$1(offsetCenter[1], posInfo.r);
+      var width = parsePercent$1(detailModel.get('width'), posInfo.r);
+      var height = parsePercent$1(detailModel.get('height'), posInfo.r);
+      var data = seriesModel.getData();
+      var value = data.get(data.mapDimension('value'), 0);
+      var autoColor = getColor(linearMap(value, [minVal, maxVal], [0, 1], true));
+      this.group.add(new Text({
+        silent: true,
+        style: setTextStyle({}, detailModel, {
+          x: x,
+          y: y,
+          text: formatLabel( // FIXME First data name ?
+          value, detailModel.get('formatter')),
+          textWidth: isNaN(width) ? null : width,
+          textHeight: isNaN(height) ? null : height,
+          textAlign: 'center',
+          textVerticalAlign: 'middle'
+        }, {
+          autoColor: autoColor,
+          forceRich: true
+        })
+      }));
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var FunnelSeries = extendSeriesModel({
+  type: 'series.funnel',
+  init: function (option) {
+    FunnelSeries.superApply(this, 'init', arguments); // Enable legend selection for each data item
+    // Use a function instead of direct access because data reference may changed
+
+    this.legendVisualProvider = new LegendVisualProvider(bind(this.getData, this), bind(this.getRawData, this)); // Extend labelLine emphasis
+
+    this._defaultLabelLine(option);
+  },
+  getInitialData: function (option, ecModel) {
+    return createListSimply(this, {
+      coordDimensions: ['value'],
+      encodeDefaulter: curry(makeSeriesEncodeForNameBased, this)
+    });
+  },
+  _defaultLabelLine: function (option) {
+    // Extend labelLine emphasis
+    defaultEmphasis(option, 'labelLine', ['show']);
+    var labelLineNormalOpt = option.labelLine;
+    var labelLineEmphasisOpt = option.emphasis.labelLine; // Not show label line if `label.normal.show = false`
+
+    labelLineNormalOpt.show = labelLineNormalOpt.show && option.label.show;
+    labelLineEmphasisOpt.show = labelLineEmphasisOpt.show && option.emphasis.label.show;
+  },
+  // Overwrite
+  getDataParams: function (dataIndex) {
+    var data = this.getData();
+    var params = FunnelSeries.superCall(this, 'getDataParams', dataIndex);
+    var valueDim = data.mapDimension('value');
+    var sum = data.getSum(valueDim); // Percent is 0 if sum is 0
+
+    params.percent = !sum ? 0 : +(data.get(valueDim, dataIndex) / sum * 100).toFixed(2);
+    params.$vars.push('percent');
+    return params;
+  },
+  defaultOption: {
+    zlevel: 0,
+    // 一级层叠
+    z: 2,
+    // 二级层叠
+    legendHoverLink: true,
+    left: 80,
+    top: 60,
+    right: 80,
+    bottom: 60,
+    // width: {totalWidth} - left - right,
+    // height: {totalHeight} - top - bottom,
+    // 默认取数据最小最大值
+    // min: 0,
+    // max: 100,
+    minSize: '0%',
+    maxSize: '100%',
+    sort: 'descending',
+    // 'ascending', 'descending'
+    orient: 'vertical',
+    gap: 0,
+    funnelAlign: 'center',
+    label: {
+      show: true,
+      position: 'outer' // formatter: 标签文本格式器，同Tooltip.formatter，不支持异步回调
+
+    },
+    labelLine: {
+      show: true,
+      length: 20,
+      lineStyle: {
+        // color: 各异,
+        width: 1,
+        type: 'solid'
+      }
+    },
+    itemStyle: {
+      // color: 各异,
+      borderColor: '#fff',
+      borderWidth: 1
+    },
+    emphasis: {
+      label: {
+        show: true
+      }
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * Piece of pie including Sector, Label, LabelLine
+ * @constructor
+ * @extends {module:zrender/graphic/Group}
+ */
+
+function FunnelPiece(data, idx) {
+  Group.call(this);
+  var polygon = new Polygon();
+  var labelLine = new Polyline();
+  var text = new Text();
+  this.add(polygon);
+  this.add(labelLine);
+  this.add(text);
+
+  this.highDownOnUpdate = function (fromState, toState) {
+    if (toState === 'emphasis') {
+      labelLine.ignore = labelLine.hoverIgnore;
+      text.ignore = text.hoverIgnore;
+    } else {
+      labelLine.ignore = labelLine.normalIgnore;
+      text.ignore = text.normalIgnore;
+    }
+  };
+
+  this.updateData(data, idx, true);
+}
+
+var funnelPieceProto = FunnelPiece.prototype;
+var opacityAccessPath = ['itemStyle', 'opacity'];
+
+funnelPieceProto.updateData = function (data, idx, firstCreate) {
+  var polygon = this.childAt(0);
+  var seriesModel = data.hostModel;
+  var itemModel = data.getItemModel(idx);
+  var layout = data.getItemLayout(idx);
+  var opacity = data.getItemModel(idx).get(opacityAccessPath);
+  opacity = opacity == null ? 1 : opacity; // Reset style
+
+  polygon.useStyle({});
+
+  if (firstCreate) {
+    polygon.setShape({
+      points: layout.points
+    });
+    polygon.setStyle({
+      opacity: 0
+    });
+    initProps(polygon, {
+      style: {
+        opacity: opacity
+      }
+    }, seriesModel, idx);
+  } else {
+    updateProps(polygon, {
+      style: {
+        opacity: opacity
+      },
+      shape: {
+        points: layout.points
+      }
+    }, seriesModel, idx);
+  } // Update common style
+
+
+  var itemStyleModel = itemModel.getModel('itemStyle');
+  var visualColor = data.getItemVisual(idx, 'color');
+  polygon.setStyle(defaults({
+    lineJoin: 'round',
+    fill: visualColor
+  }, itemStyleModel.getItemStyle(['opacity'])));
+  polygon.hoverStyle = itemStyleModel.getModel('emphasis').getItemStyle();
+
+  this._updateLabel(data, idx);
+
+  setHoverStyle(this);
+};
+
+funnelPieceProto._updateLabel = function (data, idx) {
+  var labelLine = this.childAt(1);
+  var labelText = this.childAt(2);
+  var seriesModel = data.hostModel;
+  var itemModel = data.getItemModel(idx);
+  var layout = data.getItemLayout(idx);
+  var labelLayout = layout.label;
+  var visualColor = data.getItemVisual(idx, 'color');
+  updateProps(labelLine, {
+    shape: {
+      points: labelLayout.linePoints || labelLayout.linePoints
+    }
+  }, seriesModel, idx);
+  updateProps(labelText, {
+    style: {
+      x: labelLayout.x,
+      y: labelLayout.y
+    }
+  }, seriesModel, idx);
+  labelText.attr({
+    rotation: labelLayout.rotation,
+    origin: [labelLayout.x, labelLayout.y],
+    z2: 10
+  });
+  var labelModel = itemModel.getModel('label');
+  var labelHoverModel = itemModel.getModel('emphasis.label');
+  var labelLineModel = itemModel.getModel('labelLine');
+  var labelLineHoverModel = itemModel.getModel('emphasis.labelLine');
+  var visualColor = data.getItemVisual(idx, 'color');
+  setLabelStyle(labelText.style, labelText.hoverStyle = {}, labelModel, labelHoverModel, {
+    labelFetcher: data.hostModel,
+    labelDataIndex: idx,
+    defaultText: data.getName(idx),
+    autoColor: visualColor,
+    useInsideStyle: !!labelLayout.inside
+  }, {
+    textAlign: labelLayout.textAlign,
+    textVerticalAlign: labelLayout.verticalAlign
+  });
+  labelText.ignore = labelText.normalIgnore = !labelModel.get('show');
+  labelText.hoverIgnore = !labelHoverModel.get('show');
+  labelLine.ignore = labelLine.normalIgnore = !labelLineModel.get('show');
+  labelLine.hoverIgnore = !labelLineHoverModel.get('show'); // Default use item visual color
+
+  labelLine.setStyle({
+    stroke: visualColor
+  });
+  labelLine.setStyle(labelLineModel.getModel('lineStyle').getLineStyle());
+  labelLine.hoverStyle = labelLineHoverModel.getModel('lineStyle').getLineStyle();
+};
+
+inherits(FunnelPiece, Group);
+var FunnelView = Chart.extend({
+  type: 'funnel',
+  render: function (seriesModel, ecModel, api) {
+    var data = seriesModel.getData();
+    var oldData = this._data;
+    var group = this.group;
+    data.diff(oldData).add(function (idx) {
+      var funnelPiece = new FunnelPiece(data, idx);
+      data.setItemGraphicEl(idx, funnelPiece);
+      group.add(funnelPiece);
+    }).update(function (newIdx, oldIdx) {
+      var piePiece = oldData.getItemGraphicEl(oldIdx);
+      piePiece.updateData(data, newIdx);
+      group.add(piePiece);
+      data.setItemGraphicEl(newIdx, piePiece);
+    }).remove(function (idx) {
+      var piePiece = oldData.getItemGraphicEl(idx);
+      group.remove(piePiece);
+    }).execute();
+    this._data = data;
+  },
+  remove: function () {
+    this.group.removeAll();
+    this._data = null;
+  },
+  dispose: function () {}
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function getViewRect$2(seriesModel, api) {
+  return getLayoutRect(seriesModel.getBoxLayoutParams(), {
+    width: api.getWidth(),
+    height: api.getHeight()
+  });
+}
+
+function getSortedIndices(data, sort) {
+  var valueDim = data.mapDimension('value');
+  var valueArr = data.mapArray(valueDim, function (val) {
+    return val;
+  });
+  var indices = [];
+  var isAscending = sort === 'ascending';
+
+  for (var i = 0, len = data.count(); i < len; i++) {
+    indices[i] = i;
+  } // Add custom sortable function & none sortable opetion by "options.sort"
+
+
+  if (typeof sort === 'function') {
+    indices.sort(sort);
+  } else if (sort !== 'none') {
+    indices.sort(function (a, b) {
+      return isAscending ? valueArr[a] - valueArr[b] : valueArr[b] - valueArr[a];
+    });
+  }
+
+  return indices;
+}
+
+function labelLayout$1(data) {
+  data.each(function (idx) {
+    var itemModel = data.getItemModel(idx);
+    var labelModel = itemModel.getModel('label');
+    var labelPosition = labelModel.get('position');
+    var orient = itemModel.get('orient');
+    var labelLineModel = itemModel.getModel('labelLine');
+    var layout = data.getItemLayout(idx);
+    var points = layout.points;
+    var isLabelInside = labelPosition === 'inner' || labelPosition === 'inside' || labelPosition === 'center' || labelPosition === 'insideLeft' || labelPosition === 'insideRight';
+    var textAlign;
+    var textX;
+    var textY;
+    var linePoints;
+
+    if (isLabelInside) {
+      if (labelPosition === 'insideLeft') {
+        textX = (points[0][0] + points[3][0]) / 2 + 5;
+        textY = (points[0][1] + points[3][1]) / 2;
+        textAlign = 'left';
+      } else if (labelPosition === 'insideRight') {
+        textX = (points[1][0] + points[2][0]) / 2 - 5;
+        textY = (points[1][1] + points[2][1]) / 2;
+        textAlign = 'right';
+      } else {
+        textX = (points[0][0] + points[1][0] + points[2][0] + points[3][0]) / 4;
+        textY = (points[0][1] + points[1][1] + points[2][1] + points[3][1]) / 4;
+        textAlign = 'center';
+      }
+
+      linePoints = [[textX, textY], [textX, textY]];
+    } else {
+      var x1;
+      var y1;
+      var x2;
+      var y2;
+      var labelLineLen = labelLineModel.get('length');
+
+      if (labelPosition === 'left') {
+        // Left side
+        x1 = (points[3][0] + points[0][0]) / 2;
+        y1 = (points[3][1] + points[0][1]) / 2;
+        x2 = x1 - labelLineLen;
+        textX = x2 - 5;
+        textAlign = 'right';
+      } else if (labelPosition === 'right') {
+        // Right side
+        x1 = (points[1][0] + points[2][0]) / 2;
+        y1 = (points[1][1] + points[2][1]) / 2;
+        x2 = x1 + labelLineLen;
+        textX = x2 + 5;
+        textAlign = 'left';
+      } else if (labelPosition === 'top') {
+        // Top side
+        x1 = (points[3][0] + points[0][0]) / 2;
+        y1 = (points[3][1] + points[0][1]) / 2;
+        y2 = y1 - labelLineLen;
+        textY = y2 - 5;
+        textAlign = 'center';
+      } else if (labelPosition === 'bottom') {
+        // Bottom side
+        x1 = (points[1][0] + points[2][0]) / 2;
+        y1 = (points[1][1] + points[2][1]) / 2;
+        y2 = y1 + labelLineLen;
+        textY = y2 + 5;
+        textAlign = 'center';
+      } else if (labelPosition === 'rightTop') {
+        // RightTop side
+        x1 = orient === 'horizontal' ? points[3][0] : points[1][0];
+        y1 = orient === 'horizontal' ? points[3][1] : points[1][1];
+
+        if (orient === 'horizontal') {
+          y2 = y1 - labelLineLen;
+          textY = y2 - 5;
+          textAlign = 'center';
+        } else {
+          x2 = x1 + labelLineLen;
+          textX = x2 + 5;
+          textAlign = 'top';
+        }
+      } else if (labelPosition === 'rightBottom') {
+        // RightBottom side
+        x1 = points[2][0];
+        y1 = points[2][1];
+
+        if (orient === 'horizontal') {
+          y2 = y1 + labelLineLen;
+          textY = y2 + 5;
+          textAlign = 'center';
+        } else {
+          x2 = x1 + labelLineLen;
+          textX = x2 + 5;
+          textAlign = 'bottom';
+        }
+      } else if (labelPosition === 'leftTop') {
+        // LeftTop side
+        x1 = points[0][0];
+        y1 = orient === 'horizontal' ? points[0][1] : points[1][1];
+
+        if (orient === 'horizontal') {
+          y2 = y1 - labelLineLen;
+          textY = y2 - 5;
+          textAlign = 'center';
+        } else {
+          x2 = x1 - labelLineLen;
+          textX = x2 - 5;
+          textAlign = 'right';
+        }
+      } else if (labelPosition === 'leftBottom') {
+        // LeftBottom side
+        x1 = orient === 'horizontal' ? points[1][0] : points[3][0];
+        y1 = orient === 'horizontal' ? points[1][1] : points[2][1];
+
+        if (orient === 'horizontal') {
+          y2 = y1 + labelLineLen;
+          textY = y2 + 5;
+          textAlign = 'center';
+        } else {
+          x2 = x1 - labelLineLen;
+          textX = x2 - 5;
+          textAlign = 'right';
+        }
+      } else {
+        // Right side or Bottom side
+        x1 = (points[1][0] + points[2][0]) / 2;
+        y1 = (points[1][1] + points[2][1]) / 2;
+
+        if (orient === 'horizontal') {
+          y2 = y1 + labelLineLen;
+          textY = y2 + 5;
+          textAlign = 'center';
+        } else {
+          x2 = x1 + labelLineLen;
+          textX = x2 + 5;
+          textAlign = 'left';
+        }
+      }
+
+      if (orient === 'horizontal') {
+        x2 = x1;
+        textX = x2;
+      } else {
+        y2 = y1;
+        textY = y2;
+      }
+
+      linePoints = [[x1, y1], [x2, y2]];
+    }
+
+    layout.label = {
+      linePoints: linePoints,
+      x: textX,
+      y: textY,
+      verticalAlign: 'middle',
+      textAlign: textAlign,
+      inside: isLabelInside
+    };
+  });
+}
+
+var funnelLayout = function (ecModel, api, payload) {
+  ecModel.eachSeriesByType('funnel', function (seriesModel) {
+    var data = seriesModel.getData();
+    var valueDim = data.mapDimension('value');
+    var sort = seriesModel.get('sort');
+    var viewRect = getViewRect$2(seriesModel, api);
+    var indices = getSortedIndices(data, sort);
+    var orient = seriesModel.get('orient');
+    var viewWidth = viewRect.width;
+    var viewHeight = viewRect.height;
+    var x = viewRect.x;
+    var y = viewRect.y;
+    var sizeExtent = orient === 'horizontal' ? [parsePercent$1(seriesModel.get('minSize'), viewHeight), parsePercent$1(seriesModel.get('maxSize'), viewHeight)] : [parsePercent$1(seriesModel.get('minSize'), viewWidth), parsePercent$1(seriesModel.get('maxSize'), viewWidth)];
+    var dataExtent = data.getDataExtent(valueDim);
+    var min = seriesModel.get('min');
+    var max = seriesModel.get('max');
+
+    if (min == null) {
+      min = Math.min(dataExtent[0], 0);
+    }
+
+    if (max == null) {
+      max = dataExtent[1];
+    }
+
+    var funnelAlign = seriesModel.get('funnelAlign');
+    var gap = seriesModel.get('gap');
+    var viewSize = orient === 'horizontal' ? viewWidth : viewHeight;
+    var itemSize = (viewSize - gap * (data.count() - 1)) / data.count();
+
+    var getLinePoints = function (idx, offset) {
+      // End point index is data.count() and we assign it 0
+      if (orient === 'horizontal') {
+        var val = data.get(valueDim, idx) || 0;
+        var itemHeight = linearMap(val, [min, max], sizeExtent, true);
+        var y0;
+
+        switch (funnelAlign) {
+          case 'top':
+            y0 = y;
+            break;
+
+          case 'center':
+            y0 = y + (viewHeight - itemHeight) / 2;
+            break;
+
+          case 'bottom':
+            y0 = y + (viewHeight - itemHeight);
+            break;
+        }
+
+        return [[offset, y0], [offset, y0 + itemHeight]];
+      }
+
+      var val = data.get(valueDim, idx) || 0;
+      var itemWidth = linearMap(val, [min, max], sizeExtent, true);
+      var x0;
+
+      switch (funnelAlign) {
+        case 'left':
+          x0 = x;
+          break;
+
+        case 'center':
+          x0 = x + (viewWidth - itemWidth) / 2;
+          break;
+
+        case 'right':
+          x0 = x + viewWidth - itemWidth;
+          break;
+      }
+
+      return [[x0, offset], [x0 + itemWidth, offset]];
+    };
+
+    if (sort === 'ascending') {
+      // From bottom to top
+      itemSize = -itemSize;
+      gap = -gap;
+
+      if (orient === 'horizontal') {
+        x += viewWidth;
+      } else {
+        y += viewHeight;
+      }
+
+      indices = indices.reverse();
+    }
+
+    for (var i = 0; i < indices.length; i++) {
+      var idx = indices[i];
+      var nextIdx = indices[i + 1];
+      var itemModel = data.getItemModel(idx);
+
+      if (orient === 'horizontal') {
+        var width = itemModel.get('itemStyle.width');
+
+        if (width == null) {
+          width = itemSize;
+        } else {
+          width = parsePercent$1(width, viewWidth);
+
+          if (sort === 'ascending') {
+            width = -width;
+          }
+        }
+
+        var start = getLinePoints(idx, x);
+        var end = getLinePoints(nextIdx, x + width);
+        x += width + gap;
+        data.setItemLayout(idx, {
+          points: start.concat(end.slice().reverse())
+        });
+      } else {
+        var height = itemModel.get('itemStyle.height');
+
+        if (height == null) {
+          height = itemSize;
+        } else {
+          height = parsePercent$1(height, viewHeight);
+
+          if (sort === 'ascending') {
+            height = -height;
+          }
+        }
+
+        var start = orient === 'horizontal' ? getLinePoints(idx, x) : getLinePoints(idx, y);
+        var end = orient === 'horizontal' ? getLinePoints(nextIdx, x + width) : getLinePoints(nextIdx, y + height);
+        y += height + gap;
+        data.setItemLayout(idx, {
+          points: start.concat(end.slice().reverse())
+        });
+      }
+    }
+
+    labelLayout$1(data);
+  });
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerVisual(dataColor('funnel'));
+registerLayout(funnelLayout);
+registerProcessor(dataFilter('funnel'));
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function getSeriesStackId$1(seriesModel) {
+  return seriesModel.get('stack') || '__ec_stack_' + seriesModel.seriesIndex;
+}
+
+function getAxisKey$1(polar, axis) {
+  return axis.dim + polar.model.componentIndex;
+}
+/**
+ * @param {string} seriesType
+ * @param {module:echarts/model/Global} ecModel
+ * @param {module:echarts/ExtensionAPI} api
+ */
+
+
+function barLayoutPolar(seriesType, ecModel, api) {
+  var lastStackCoords = {};
+  var barWidthAndOffset = calRadialBar(filter(ecModel.getSeriesByType(seriesType), function (seriesModel) {
+    return !ecModel.isSeriesFiltered(seriesModel) && seriesModel.coordinateSystem && seriesModel.coordinateSystem.type === 'polar';
+  }));
+  ecModel.eachSeriesByType(seriesType, function (seriesModel) {
+    // Check series coordinate, do layout for polar only
+    if (seriesModel.coordinateSystem.type !== 'polar') {
+      return;
+    }
+
+    var data = seriesModel.getData();
+    var polar = seriesModel.coordinateSystem;
+    var baseAxis = polar.getBaseAxis();
+    var axisKey = getAxisKey$1(polar, baseAxis);
+    var stackId = getSeriesStackId$1(seriesModel);
+    var columnLayoutInfo = barWidthAndOffset[axisKey][stackId];
+    var columnOffset = columnLayoutInfo.offset;
+    var columnWidth = columnLayoutInfo.width;
+    var valueAxis = polar.getOtherAxis(baseAxis);
+    var cx = seriesModel.coordinateSystem.cx;
+    var cy = seriesModel.coordinateSystem.cy;
+    var barMinHeight = seriesModel.get('barMinHeight') || 0;
+    var barMinAngle = seriesModel.get('barMinAngle') || 0;
+    lastStackCoords[stackId] = lastStackCoords[stackId] || [];
+    var valueDim = data.mapDimension(valueAxis.dim);
+    var baseDim = data.mapDimension(baseAxis.dim);
+    var stacked = isDimensionStacked(data, valueDim
+    /*, baseDim*/
+    );
+    var clampLayout = baseAxis.dim !== 'radius' || !seriesModel.get('roundCap', true);
+    var valueAxisStart = valueAxis.dim === 'radius' ? valueAxis.dataToRadius(0) : valueAxis.dataToAngle(0);
+
+    for (var idx = 0, len = data.count(); idx < len; idx++) {
+      var value = data.get(valueDim, idx);
+      var baseValue = data.get(baseDim, idx);
+      var sign = value >= 0 ? 'p' : 'n';
+      var baseCoord = valueAxisStart; // Because of the barMinHeight, we can not use the value in
+      // stackResultDimension directly.
+      // Only ordinal axis can be stacked.
+
+      if (stacked) {
+        if (!lastStackCoords[stackId][baseValue]) {
+          lastStackCoords[stackId][baseValue] = {
+            p: valueAxisStart,
+            // Positive stack
+            n: valueAxisStart // Negative stack
+
+          };
+        } // Should also consider #4243
+
+
+        baseCoord = lastStackCoords[stackId][baseValue][sign];
+      }
+
+      var r0;
+      var r;
+      var startAngle;
+      var endAngle; // radial sector
+
+      if (valueAxis.dim === 'radius') {
+        var radiusSpan = valueAxis.dataToRadius(value) - valueAxisStart;
+        var angle = baseAxis.dataToAngle(baseValue);
+
+        if (Math.abs(radiusSpan) < barMinHeight) {
+          radiusSpan = (radiusSpan < 0 ? -1 : 1) * barMinHeight;
+        }
+
+        r0 = baseCoord;
+        r = baseCoord + radiusSpan;
+        startAngle = angle - columnOffset;
+        endAngle = startAngle - columnWidth;
+        stacked && (lastStackCoords[stackId][baseValue][sign] = r);
+      } // tangential sector
+      else {
+          var angleSpan = valueAxis.dataToAngle(value, clampLayout) - valueAxisStart;
+          var radius = baseAxis.dataToRadius(baseValue);
+
+          if (Math.abs(angleSpan) < barMinAngle) {
+            angleSpan = (angleSpan < 0 ? -1 : 1) * barMinAngle;
+          }
+
+          r0 = radius + columnOffset;
+          r = r0 + columnWidth;
+          startAngle = baseCoord;
+          endAngle = baseCoord + angleSpan; // if the previous stack is at the end of the ring,
+          // add a round to differentiate it from origin
+          // var extent = angleAxis.getExtent();
+          // var stackCoord = angle;
+          // if (stackCoord === extent[0] && value > 0) {
+          //     stackCoord = extent[1];
+          // }
+          // else if (stackCoord === extent[1] && value < 0) {
+          //     stackCoord = extent[0];
+          // }
+
+          stacked && (lastStackCoords[stackId][baseValue][sign] = endAngle);
+        }
+
+      data.setItemLayout(idx, {
+        cx: cx,
+        cy: cy,
+        r0: r0,
+        r: r,
+        // Consider that positive angle is anti-clockwise,
+        // while positive radian of sector is clockwise
+        startAngle: -startAngle * Math.PI / 180,
+        endAngle: -endAngle * Math.PI / 180
+      });
+    }
+  }, this);
+}
+/**
+ * Calculate bar width and offset for radial bar charts
+ */
+
+
+function calRadialBar(barSeries, api) {
+  // Columns info on each category axis. Key is polar name
+  var columnsMap = {};
+  each$1(barSeries, function (seriesModel, idx) {
+    var data = seriesModel.getData();
+    var polar = seriesModel.coordinateSystem;
+    var baseAxis = polar.getBaseAxis();
+    var axisKey = getAxisKey$1(polar, baseAxis);
+    var axisExtent = baseAxis.getExtent();
+    var bandWidth = baseAxis.type === 'category' ? baseAxis.getBandWidth() : Math.abs(axisExtent[1] - axisExtent[0]) / data.count();
+    var columnsOnAxis = columnsMap[axisKey] || {
+      bandWidth: bandWidth,
+      remainedWidth: bandWidth,
+      autoWidthCount: 0,
+      categoryGap: '20%',
+      gap: '30%',
+      stacks: {}
+    };
+    var stacks = columnsOnAxis.stacks;
+    columnsMap[axisKey] = columnsOnAxis;
+    var stackId = getSeriesStackId$1(seriesModel);
+
+    if (!stacks[stackId]) {
+      columnsOnAxis.autoWidthCount++;
+    }
+
+    stacks[stackId] = stacks[stackId] || {
+      width: 0,
+      maxWidth: 0
+    };
+    var barWidth = parsePercent$1(seriesModel.get('barWidth'), bandWidth);
+    var barMaxWidth = parsePercent$1(seriesModel.get('barMaxWidth'), bandWidth);
+    var barGap = seriesModel.get('barGap');
+    var barCategoryGap = seriesModel.get('barCategoryGap');
+
+    if (barWidth && !stacks[stackId].width) {
+      barWidth = Math.min(columnsOnAxis.remainedWidth, barWidth);
+      stacks[stackId].width = barWidth;
+      columnsOnAxis.remainedWidth -= barWidth;
+    }
+
+    barMaxWidth && (stacks[stackId].maxWidth = barMaxWidth);
+    barGap != null && (columnsOnAxis.gap = barGap);
+    barCategoryGap != null && (columnsOnAxis.categoryGap = barCategoryGap);
+  });
+  var result = {};
+  each$1(columnsMap, function (columnsOnAxis, coordSysName) {
+    result[coordSysName] = {};
+    var stacks = columnsOnAxis.stacks;
+    var bandWidth = columnsOnAxis.bandWidth;
+    var categoryGap = parsePercent$1(columnsOnAxis.categoryGap, bandWidth);
+    var barGapPercent = parsePercent$1(columnsOnAxis.gap, 1);
+    var remainedWidth = columnsOnAxis.remainedWidth;
+    var autoWidthCount = columnsOnAxis.autoWidthCount;
+    var autoWidth = (remainedWidth - categoryGap) / (autoWidthCount + (autoWidthCount - 1) * barGapPercent);
+    autoWidth = Math.max(autoWidth, 0); // Find if any auto calculated bar exceeded maxBarWidth
+
+    each$1(stacks, function (column, stack) {
+      var maxWidth = column.maxWidth;
+
+      if (maxWidth && maxWidth < autoWidth) {
+        maxWidth = Math.min(maxWidth, remainedWidth);
+
+        if (column.width) {
+          maxWidth = Math.min(maxWidth, column.width);
+        }
+
+        remainedWidth -= maxWidth;
+        column.width = maxWidth;
+        autoWidthCount--;
+      }
+    }); // Recalculate width again
+
+    autoWidth = (remainedWidth - categoryGap) / (autoWidthCount + (autoWidthCount - 1) * barGapPercent);
+    autoWidth = Math.max(autoWidth, 0);
+    var widthSum = 0;
+    var lastColumn;
+    each$1(stacks, function (column, idx) {
+      if (!column.width) {
+        column.width = autoWidth;
+      }
+
+      lastColumn = column;
+      widthSum += column.width * (1 + barGapPercent);
+    });
+
+    if (lastColumn) {
+      widthSum -= lastColumn.width * barGapPercent;
+    }
+
+    var offset = -widthSum / 2;
+    each$1(stacks, function (column, stackId) {
+      result[coordSysName][stackId] = result[coordSysName][stackId] || {
+        offset: offset,
+        width: column.width
+      };
+      offset += column.width * (1 + barGapPercent);
+    });
+  });
+  return result;
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function RadiusAxis(scale, radiusExtent) {
+  Axis.call(this, 'radius', scale, radiusExtent);
+  /**
+   * Axis type
+   *  - 'category'
+   *  - 'value'
+   *  - 'time'
+   *  - 'log'
+   * @type {string}
+   */
+
+  this.type = 'category';
+}
+
+RadiusAxis.prototype = {
+  constructor: RadiusAxis,
+
+  /**
+   * @override
+   */
+  pointToData: function (point, clamp) {
+    return this.polar.pointToData(point, clamp)[this.dim === 'radius' ? 0 : 1];
+  },
+  dataToRadius: Axis.prototype.dataToCoord,
+  radiusToData: Axis.prototype.coordToData
+};
+inherits(RadiusAxis, Axis);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var inner$9 = makeInner();
+
+function AngleAxis(scale, angleExtent) {
+  angleExtent = angleExtent || [0, 360];
+  Axis.call(this, 'angle', scale, angleExtent);
+  /**
+   * Axis type
+   *  - 'category'
+   *  - 'value'
+   *  - 'time'
+   *  - 'log'
+   * @type {string}
+   */
+
+  this.type = 'category';
+}
+
+AngleAxis.prototype = {
+  constructor: AngleAxis,
+
+  /**
+   * @override
+   */
+  pointToData: function (point, clamp) {
+    return this.polar.pointToData(point, clamp)[this.dim === 'radius' ? 0 : 1];
+  },
+  dataToAngle: Axis.prototype.dataToCoord,
+  angleToData: Axis.prototype.coordToData,
+
+  /**
+   * Only be called in category axis.
+   * Angle axis uses text height to decide interval
+   *
+   * @override
+   * @return {number} Auto interval for cateogry axis tick and label
+   */
+  calculateCategoryInterval: function () {
+    var axis = this;
+    var labelModel = axis.getLabelModel();
+    var ordinalScale = axis.scale;
+    var ordinalExtent = ordinalScale.getExtent(); // Providing this method is for optimization:
+    // avoid generating a long array by `getTicks`
+    // in large category data case.
+
+    var tickCount = ordinalScale.count();
+
+    if (ordinalExtent[1] - ordinalExtent[0] < 1) {
+      return 0;
+    }
+
+    var tickValue = ordinalExtent[0];
+    var unitSpan = axis.dataToCoord(tickValue + 1) - axis.dataToCoord(tickValue);
+    var unitH = Math.abs(unitSpan); // Not precise, just use height as text width
+    // and each distance from axis line yet.
+
+    var rect = getBoundingRect(tickValue, labelModel.getFont(), 'center', 'top');
+    var maxH = Math.max(rect.height, 7);
+    var dh = maxH / unitH; // 0/0 is NaN, 1/0 is Infinity.
+
+    isNaN(dh) && (dh = Infinity);
+    var interval = Math.max(0, Math.floor(dh));
+    var cache = inner$9(axis.model);
+    var lastAutoInterval = cache.lastAutoInterval;
+    var lastTickCount = cache.lastTickCount; // Use cache to keep interval stable while moving zoom window,
+    // otherwise the calculated interval might jitter when the zoom
+    // window size is close to the interval-changing size.
+
+    if (lastAutoInterval != null && lastTickCount != null && Math.abs(lastAutoInterval - interval) <= 1 && Math.abs(lastTickCount - tickCount) <= 1 // Always choose the bigger one, otherwise the critical
+    // point is not the same when zooming in or zooming out.
+    && lastAutoInterval > interval) {
+      interval = lastAutoInterval;
+    } // Only update cache if cache not used, otherwise the
+    // changing of interval is too insensitive.
+    else {
+        cache.lastTickCount = tickCount;
+        cache.lastAutoInterval = interval;
+      }
+
+    return interval;
+  }
+};
+inherits(AngleAxis, Axis);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/**
+ * @module echarts/coord/polar/Polar
+ */
+/**
+ * @alias {module:echarts/coord/polar/Polar}
+ * @constructor
+ * @param {string} name
+ */
+
+var Polar = function (name) {
+  /**
+   * @type {string}
+   */
+  this.name = name || '';
+  /**
+   * x of polar center
+   * @type {number}
+   */
+
+  this.cx = 0;
+  /**
+   * y of polar center
+   * @type {number}
+   */
+
+  this.cy = 0;
+  /**
+   * @type {module:echarts/coord/polar/RadiusAxis}
+   * @private
+   */
+
+  this._radiusAxis = new RadiusAxis();
+  /**
+   * @type {module:echarts/coord/polar/AngleAxis}
+   * @private
+   */
+
+  this._angleAxis = new AngleAxis();
+  this._radiusAxis.polar = this._angleAxis.polar = this;
+};
+
+Polar.prototype = {
+  type: 'polar',
+  axisPointerEnabled: true,
+  constructor: Polar,
+
+  /**
+   * @param {Array.<string>}
+   * @readOnly
+   */
+  dimensions: ['radius', 'angle'],
+
+  /**
+   * @type {module:echarts/coord/PolarModel}
+   */
+  model: null,
+
+  /**
+   * If contain coord
+   * @param {Array.<number>} point
+   * @return {boolean}
+   */
+  containPoint: function (point) {
+    var coord = this.pointToCoord(point);
+    return this._radiusAxis.contain(coord[0]) && this._angleAxis.contain(coord[1]);
+  },
+
+  /**
+   * If contain data
+   * @param {Array.<number>} data
+   * @return {boolean}
+   */
+  containData: function (data) {
+    return this._radiusAxis.containData(data[0]) && this._angleAxis.containData(data[1]);
+  },
+
+  /**
+   * @param {string} dim
+   * @return {module:echarts/coord/polar/AngleAxis|module:echarts/coord/polar/RadiusAxis}
+   */
+  getAxis: function (dim) {
+    return this['_' + dim + 'Axis'];
+  },
+
+  /**
+   * @return {Array.<module:echarts/coord/Axis>}
+   */
+  getAxes: function () {
+    return [this._radiusAxis, this._angleAxis];
+  },
+
+  /**
+   * Get axes by type of scale
+   * @param {string} scaleType
+   * @return {module:echarts/coord/polar/AngleAxis|module:echarts/coord/polar/RadiusAxis}
+   */
+  getAxesByScale: function (scaleType) {
+    var axes = [];
+    var angleAxis = this._angleAxis;
+    var radiusAxis = this._radiusAxis;
+    angleAxis.scale.type === scaleType && axes.push(angleAxis);
+    radiusAxis.scale.type === scaleType && axes.push(radiusAxis);
+    return axes;
+  },
+
+  /**
+   * @return {module:echarts/coord/polar/AngleAxis}
+   */
+  getAngleAxis: function () {
+    return this._angleAxis;
+  },
+
+  /**
+   * @return {module:echarts/coord/polar/RadiusAxis}
+   */
+  getRadiusAxis: function () {
+    return this._radiusAxis;
+  },
+
+  /**
+   * @param {module:echarts/coord/polar/Axis}
+   * @return {module:echarts/coord/polar/Axis}
+   */
+  getOtherAxis: function (axis) {
+    var angleAxis = this._angleAxis;
+    return axis === angleAxis ? this._radiusAxis : angleAxis;
+  },
+
+  /**
+   * Base axis will be used on stacking.
+   *
+   * @return {module:echarts/coord/polar/Axis}
+   */
+  getBaseAxis: function () {
+    return this.getAxesByScale('ordinal')[0] || this.getAxesByScale('time')[0] || this.getAngleAxis();
+  },
+
+  /**
+   * @param {string} [dim] 'radius' or 'angle' or 'auto' or null/undefined
+   * @return {Object} {baseAxes: [], otherAxes: []}
+   */
+  getTooltipAxes: function (dim) {
+    var baseAxis = dim != null && dim !== 'auto' ? this.getAxis(dim) : this.getBaseAxis();
+    return {
+      baseAxes: [baseAxis],
+      otherAxes: [this.getOtherAxis(baseAxis)]
+    };
+  },
+
+  /**
+   * Convert a single data item to (x, y) point.
+   * Parameter data is an array which the first element is radius and the second is angle
+   * @param {Array.<number>} data
+   * @param {boolean} [clamp=false]
+   * @return {Array.<number>}
+   */
+  dataToPoint: function (data, clamp) {
+    return this.coordToPoint([this._radiusAxis.dataToRadius(data[0], clamp), this._angleAxis.dataToAngle(data[1], clamp)]);
+  },
+
+  /**
+   * Convert a (x, y) point to data
+   * @param {Array.<number>} point
+   * @param {boolean} [clamp=false]
+   * @return {Array.<number>}
+   */
+  pointToData: function (point, clamp) {
+    var coord = this.pointToCoord(point);
+    return [this._radiusAxis.radiusToData(coord[0], clamp), this._angleAxis.angleToData(coord[1], clamp)];
+  },
+
+  /**
+   * Convert a (x, y) point to (radius, angle) coord
+   * @param {Array.<number>} point
+   * @return {Array.<number>}
+   */
+  pointToCoord: function (point) {
+    var dx = point[0] - this.cx;
+    var dy = point[1] - this.cy;
+    var angleAxis = this.getAngleAxis();
+    var extent = angleAxis.getExtent();
+    var minAngle = Math.min(extent[0], extent[1]);
+    var maxAngle = Math.max(extent[0], extent[1]); // Fix fixed extent in polarCreator
+    // FIXME
+
+    angleAxis.inverse ? minAngle = maxAngle - 360 : maxAngle = minAngle + 360;
+    var radius = Math.sqrt(dx * dx + dy * dy);
+    dx /= radius;
+    dy /= radius;
+    var radian = Math.atan2(-dy, dx) / Math.PI * 180; // move to angleExtent
+
+    var dir = radian < minAngle ? 1 : -1;
+
+    while (radian < minAngle || radian > maxAngle) {
+      radian += dir * 360;
+    }
+
+    return [radius, radian];
+  },
+
+  /**
+   * Convert a (radius, angle) coord to (x, y) point
+   * @param {Array.<number>} coord
+   * @return {Array.<number>}
+   */
+  coordToPoint: function (coord) {
+    var radius = coord[0];
+    var radian = coord[1] / 180 * Math.PI;
+    var x = Math.cos(radian) * radius + this.cx; // Inverse the y
+
+    var y = -Math.sin(radian) * radius + this.cy;
+    return [x, y];
+  },
+
+  /**
+   * Get ring area of cartesian.
+   * Area will have a contain function to determine if a point is in the coordinate system.
+   * @return {Ring}
+   */
+  getArea: function () {
+    var angleAxis = this.getAngleAxis();
+    var radiusAxis = this.getRadiusAxis();
+    var radiusExtent = radiusAxis.getExtent().slice();
+    radiusExtent[0] > radiusExtent[1] && radiusExtent.reverse();
+    var angleExtent = angleAxis.getExtent();
+    var RADIAN = Math.PI / 180;
+    return {
+      cx: this.cx,
+      cy: this.cy,
+      r0: radiusExtent[0],
+      r: radiusExtent[1],
+      startAngle: -angleExtent[0] * RADIAN,
+      endAngle: -angleExtent[1] * RADIAN,
+      clockwise: angleAxis.inverse,
+      contain: function (x, y) {
+        // It's a ring shape.
+        // Start angle and end angle don't matter
+        var dx = x - this.cx;
+        var dy = y - this.cy;
+        var d2 = dx * dx + dy * dy;
+        var r = this.r;
+        var r0 = this.r0;
+        return d2 <= r * r && d2 >= r0 * r0;
+      }
+    };
+  }
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var PolarAxisModel = ComponentModel.extend({
+  type: 'polarAxis',
+
+  /**
+   * @type {module:echarts/coord/polar/AngleAxis|module:echarts/coord/polar/RadiusAxis}
+   */
+  axis: null,
+
+  /**
+   * @override
+   */
+  getCoordSysModel: function () {
+    return this.ecModel.queryComponents({
+      mainType: 'polar',
+      index: this.option.polarIndex,
+      id: this.option.polarId
+    })[0];
+  }
+});
+merge(PolarAxisModel.prototype, axisModelCommonMixin);
+var polarAxisDefaultExtendedOption = {
+  angle: {
+    // polarIndex: 0,
+    // polarId: '',
+    startAngle: 90,
+    clockwise: true,
+    splitNumber: 12,
+    axisLabel: {
+      rotate: false
+    }
+  },
+  radius: {
+    // polarIndex: 0,
+    // polarId: '',
+    splitNumber: 5
+  }
+};
+
+function getAxisType$1(axisDim, option) {
+  // Default axis with data is category axis
+  return option.type || (option.data ? 'category' : 'value');
+}
+
+axisModelCreator('angle', PolarAxisModel, getAxisType$1, polarAxisDefaultExtendedOption.angle);
+axisModelCreator('radius', PolarAxisModel, getAxisType$1, polarAxisDefaultExtendedOption.radius);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+extendComponentModel({
+  type: 'polar',
+  dependencies: ['polarAxis', 'angleAxis'],
+
+  /**
+   * @type {module:echarts/coord/polar/Polar}
+   */
+  coordinateSystem: null,
+
+  /**
+   * @param {string} axisType
+   * @return {module:echarts/coord/polar/AxisModel}
+   */
+  findAxisModel: function (axisType) {
+    var foundAxisModel;
+    var ecModel = this.ecModel;
+    ecModel.eachComponent(axisType, function (axisModel) {
+      if (axisModel.getCoordSysModel() === this) {
+        foundAxisModel = axisModel;
+      }
+    }, this);
+    return foundAxisModel;
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 0,
+    center: ['50%', '50%'],
+    radius: '80%'
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// TODO Axis scale
+/**
+ * Resize method bound to the polar
+ * @param {module:echarts/coord/polar/PolarModel} polarModel
+ * @param {module:echarts/ExtensionAPI} api
+ */
+
+function resizePolar(polar, polarModel, api) {
+  var center = polarModel.get('center');
+  var width = api.getWidth();
+  var height = api.getHeight();
+  polar.cx = parsePercent$1(center[0], width);
+  polar.cy = parsePercent$1(center[1], height);
+  var radiusAxis = polar.getRadiusAxis();
+  var size = Math.min(width, height) / 2;
+  var radius = polarModel.get('radius');
+
+  if (radius == null) {
+    radius = [0, '100%'];
+  } else if (!isArray(radius)) {
+    // r0 = 0
+    radius = [0, radius];
+  }
+
+  radius = [parsePercent$1(radius[0], size), parsePercent$1(radius[1], size)];
+  radiusAxis.inverse ? radiusAxis.setExtent(radius[1], radius[0]) : radiusAxis.setExtent(radius[0], radius[1]);
+}
+/**
+ * Update polar
+ */
+
+
+function updatePolarScale(ecModel, api) {
+  var polar = this;
+  var angleAxis = polar.getAngleAxis();
+  var radiusAxis = polar.getRadiusAxis(); // Reset scale
+
+  angleAxis.scale.setExtent(Infinity, -Infinity);
+  radiusAxis.scale.setExtent(Infinity, -Infinity);
+  ecModel.eachSeries(function (seriesModel) {
+    if (seriesModel.coordinateSystem === polar) {
+      var data = seriesModel.getData();
+      each$1(data.mapDimension('radius', true), function (dim) {
+        radiusAxis.scale.unionExtentFromData(data, getStackedDimension(data, dim));
+      });
+      each$1(data.mapDimension('angle', true), function (dim) {
+        angleAxis.scale.unionExtentFromData(data, getStackedDimension(data, dim));
+      });
+    }
+  });
+  niceScaleExtent(angleAxis.scale, angleAxis.model);
+  niceScaleExtent(radiusAxis.scale, radiusAxis.model); // Fix extent of category angle axis
+
+  if (angleAxis.type === 'category' && !angleAxis.onBand) {
+    var extent = angleAxis.getExtent();
+    var diff = 360 / angleAxis.scale.count();
+    angleAxis.inverse ? extent[1] += diff : extent[1] -= diff;
+    angleAxis.setExtent(extent[0], extent[1]);
+  }
+}
+/**
+ * Set common axis properties
+ * @param {module:echarts/coord/polar/AngleAxis|module:echarts/coord/polar/RadiusAxis}
+ * @param {module:echarts/coord/polar/AxisModel}
+ * @inner
+ */
+
+
+function setAxis(axis, axisModel) {
+  axis.type = axisModel.get('type');
+  axis.scale = createScaleByModel(axisModel);
+  axis.onBand = axisModel.get('boundaryGap') && axis.type === 'category';
+  axis.inverse = axisModel.get('inverse');
+
+  if (axisModel.mainType === 'angleAxis') {
+    axis.inverse ^= axisModel.get('clockwise');
+    var startAngle = axisModel.get('startAngle');
+    axis.setExtent(startAngle, startAngle + (axis.inverse ? -360 : 360));
+  } // Inject axis instance
+
+
+  axisModel.axis = axis;
+  axis.model = axisModel;
+}
+
+var polarCreator = {
+  dimensions: Polar.prototype.dimensions,
+  create: function (ecModel, api) {
+    var polarList = [];
+    ecModel.eachComponent('polar', function (polarModel, idx) {
+      var polar = new Polar(idx); // Inject resize and update method
+
+      polar.update = updatePolarScale;
+      var radiusAxis = polar.getRadiusAxis();
+      var angleAxis = polar.getAngleAxis();
+      var radiusAxisModel = polarModel.findAxisModel('radiusAxis');
+      var angleAxisModel = polarModel.findAxisModel('angleAxis');
+      setAxis(radiusAxis, radiusAxisModel);
+      setAxis(angleAxis, angleAxisModel);
+      resizePolar(polar, polarModel, api);
+      polarList.push(polar);
+      polarModel.coordinateSystem = polar;
+      polar.model = polarModel;
+    }); // Inject coordinateSystem to series
+
+    ecModel.eachSeries(function (seriesModel) {
+      if (seriesModel.get('coordinateSystem') === 'polar') {
+        var polarModel = ecModel.queryComponents({
+          mainType: 'polar',
+          index: seriesModel.get('polarIndex'),
+          id: seriesModel.get('polarId')
+        })[0];
+        seriesModel.coordinateSystem = polarModel.coordinateSystem;
+      }
+    });
+    return polarList;
+  }
+};
+CoordinateSystemManager.register('polar', polarCreator);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var elementList = ['axisLine', 'axisLabel', 'axisTick', 'minorTick', 'splitLine', 'minorSplitLine', 'splitArea'];
+
+function getAxisLineShape(polar, rExtent, angle) {
+  rExtent[1] > rExtent[0] && (rExtent = rExtent.slice().reverse());
+  var start = polar.coordToPoint([rExtent[0], angle]);
+  var end = polar.coordToPoint([rExtent[1], angle]);
+  return {
+    x1: start[0],
+    y1: start[1],
+    x2: end[0],
+    y2: end[1]
+  };
+}
+
+function getRadiusIdx(polar) {
+  var radiusAxis = polar.getRadiusAxis();
+  return radiusAxis.inverse ? 0 : 1;
+} // Remove the last tick which will overlap the first tick
+
+
+function fixAngleOverlap(list) {
+  var firstItem = list[0];
+  var lastItem = list[list.length - 1];
+
+  if (firstItem && lastItem && Math.abs(Math.abs(firstItem.coord - lastItem.coord) - 360) < 1e-4) {
+    list.pop();
+  }
+}
+
+AxisView.extend({
+  type: 'angleAxis',
+  axisPointerClass: 'PolarAxisPointer',
+  render: function (angleAxisModel, ecModel) {
+    this.group.removeAll();
+
+    if (!angleAxisModel.get('show')) {
+      return;
+    }
+
+    var angleAxis = angleAxisModel.axis;
+    var polar = angleAxis.polar;
+    var radiusExtent = polar.getRadiusAxis().getExtent();
+    var ticksAngles = angleAxis.getTicksCoords();
+    var minorTickAngles = angleAxis.getMinorTicksCoords();
+    var labels = map(angleAxis.getViewLabels(), function (labelItem) {
+      var labelItem = clone(labelItem);
+      labelItem.coord = angleAxis.dataToCoord(labelItem.tickValue);
+      return labelItem;
+    });
+    fixAngleOverlap(labels);
+    fixAngleOverlap(ticksAngles);
+    each$1(elementList, function (name) {
+      if (angleAxisModel.get(name + '.show') && (!angleAxis.scale.isBlank() || name === 'axisLine')) {
+        this['_' + name](angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent, labels);
+      }
+    }, this);
+  },
+
+  /**
+   * @private
+   */
+  _axisLine: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent) {
+    var lineStyleModel = angleAxisModel.getModel('axisLine.lineStyle'); // extent id of the axis radius (r0 and r)
+
+    var rId = getRadiusIdx(polar);
+    var r0Id = rId ? 0 : 1;
+    var shape;
+
+    if (radiusExtent[r0Id] === 0) {
+      shape = new Circle({
+        shape: {
+          cx: polar.cx,
+          cy: polar.cy,
+          r: radiusExtent[rId]
+        },
+        style: lineStyleModel.getLineStyle(),
+        z2: 1,
+        silent: true
+      });
+    } else {
+      shape = new Ring({
+        shape: {
+          cx: polar.cx,
+          cy: polar.cy,
+          r: radiusExtent[rId],
+          r0: radiusExtent[r0Id]
+        },
+        style: lineStyleModel.getLineStyle(),
+        z2: 1,
+        silent: true
+      });
+    }
+
+    shape.style.fill = null;
+    this.group.add(shape);
+  },
+
+  /**
+   * @private
+   */
+  _axisTick: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent) {
+    var tickModel = angleAxisModel.getModel('axisTick');
+    var tickLen = (tickModel.get('inside') ? -1 : 1) * tickModel.get('length');
+    var radius = radiusExtent[getRadiusIdx(polar)];
+    var lines = map(ticksAngles, function (tickAngleItem) {
+      return new Line({
+        shape: getAxisLineShape(polar, [radius, radius + tickLen], tickAngleItem.coord)
+      });
+    });
+    this.group.add(mergePath(lines, {
+      style: defaults(tickModel.getModel('lineStyle').getLineStyle(), {
+        stroke: angleAxisModel.get('axisLine.lineStyle.color')
+      })
+    }));
+  },
+
+  /**
+   * @private
+   */
+  _minorTick: function (angleAxisModel, polar, tickAngles, minorTickAngles, radiusExtent) {
+    if (!minorTickAngles.length) {
+      return;
+    }
+
+    var tickModel = angleAxisModel.getModel('axisTick');
+    var minorTickModel = angleAxisModel.getModel('minorTick');
+    var tickLen = (tickModel.get('inside') ? -1 : 1) * minorTickModel.get('length');
+    var radius = radiusExtent[getRadiusIdx(polar)];
+    var lines = [];
+
+    for (var i = 0; i < minorTickAngles.length; i++) {
+      for (var k = 0; k < minorTickAngles[i].length; k++) {
+        lines.push(new Line({
+          shape: getAxisLineShape(polar, [radius, radius + tickLen], minorTickAngles[i][k].coord)
+        }));
+      }
+    }
+
+    this.group.add(mergePath(lines, {
+      style: defaults(minorTickModel.getModel('lineStyle').getLineStyle(), defaults(tickModel.getLineStyle(), {
+        stroke: angleAxisModel.get('axisLine.lineStyle.color')
+      }))
+    }));
+  },
+
+  /**
+   * @private
+   */
+  _axisLabel: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent, labels) {
+    var rawCategoryData = angleAxisModel.getCategories(true);
+    var commonLabelModel = angleAxisModel.getModel('axisLabel');
+    var labelMargin = commonLabelModel.get('margin');
+    var triggerEvent = angleAxisModel.get('triggerEvent'); // Use length of ticksAngles because it may remove the last tick to avoid overlapping
+
+    each$1(labels, function (labelItem, idx) {
+      var labelModel = commonLabelModel;
+      var tickValue = labelItem.tickValue;
+      var r = radiusExtent[getRadiusIdx(polar)];
+      var p = polar.coordToPoint([r + labelMargin, labelItem.coord]);
+      var cx = polar.cx;
+      var cy = polar.cy;
+      var labelTextAlign = Math.abs(p[0] - cx) / r < 0.3 ? 'center' : p[0] > cx ? 'left' : 'right';
+      var labelTextVerticalAlign = Math.abs(p[1] - cy) / r < 0.3 ? 'middle' : p[1] > cy ? 'top' : 'bottom';
+
+      if (rawCategoryData && rawCategoryData[tickValue] && rawCategoryData[tickValue].textStyle) {
+        labelModel = new Model(rawCategoryData[tickValue].textStyle, commonLabelModel, commonLabelModel.ecModel);
+      }
+
+      var textEl = new Text({
+        silent: AxisBuilder.isLabelSilent(angleAxisModel)
+      });
+      this.group.add(textEl);
+      setTextStyle(textEl.style, labelModel, {
+        x: p[0],
+        y: p[1],
+        textFill: labelModel.getTextColor() || angleAxisModel.get('axisLine.lineStyle.color'),
+        text: labelItem.formattedLabel,
+        textAlign: labelTextAlign,
+        textVerticalAlign: labelTextVerticalAlign
+      }); // Pack data for mouse event
+
+      if (triggerEvent) {
+        textEl.eventData = AxisBuilder.makeAxisEventDataBase(angleAxisModel);
+        textEl.eventData.targetType = 'axisLabel';
+        textEl.eventData.value = labelItem.rawLabel;
+      }
+    }, this);
+  },
+
+  /**
+   * @private
+   */
+  _splitLine: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent) {
+    var splitLineModel = angleAxisModel.getModel('splitLine');
+    var lineStyleModel = splitLineModel.getModel('lineStyle');
+    var lineColors = lineStyleModel.get('color');
+    var lineCount = 0;
+    lineColors = lineColors instanceof Array ? lineColors : [lineColors];
+    var splitLines = [];
+
+    for (var i = 0; i < ticksAngles.length; i++) {
+      var colorIndex = lineCount++ % lineColors.length;
+      splitLines[colorIndex] = splitLines[colorIndex] || [];
+      splitLines[colorIndex].push(new Line({
+        shape: getAxisLineShape(polar, radiusExtent, ticksAngles[i].coord)
+      }));
+    } // Simple optimization
+    // Batching the lines if color are the same
+
+
+    for (var i = 0; i < splitLines.length; i++) {
+      this.group.add(mergePath(splitLines[i], {
+        style: defaults({
+          stroke: lineColors[i % lineColors.length]
+        }, lineStyleModel.getLineStyle()),
+        silent: true,
+        z: angleAxisModel.get('z')
+      }));
+    }
+  },
+
+  /**
+   * @private
+   */
+  _minorSplitLine: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent) {
+    if (!minorTickAngles.length) {
+      return;
+    }
+
+    var minorSplitLineModel = angleAxisModel.getModel('minorSplitLine');
+    var lineStyleModel = minorSplitLineModel.getModel('lineStyle');
+    var lines = [];
+
+    for (var i = 0; i < minorTickAngles.length; i++) {
+      for (var k = 0; k < minorTickAngles[i].length; k++) {
+        lines.push(new Line({
+          shape: getAxisLineShape(polar, radiusExtent, minorTickAngles[i][k].coord)
+        }));
+      }
+    }
+
+    this.group.add(mergePath(lines, {
+      style: lineStyleModel.getLineStyle(),
+      silent: true,
+      z: angleAxisModel.get('z')
+    }));
+  },
+
+  /**
+   * @private
+   */
+  _splitArea: function (angleAxisModel, polar, ticksAngles, minorTickAngles, radiusExtent) {
+    if (!ticksAngles.length) {
+      return;
+    }
+
+    var splitAreaModel = angleAxisModel.getModel('splitArea');
+    var areaStyleModel = splitAreaModel.getModel('areaStyle');
+    var areaColors = areaStyleModel.get('color');
+    var lineCount = 0;
+    areaColors = areaColors instanceof Array ? areaColors : [areaColors];
+    var splitAreas = [];
+    var RADIAN = Math.PI / 180;
+    var prevAngle = -ticksAngles[0].coord * RADIAN;
+    var r0 = Math.min(radiusExtent[0], radiusExtent[1]);
+    var r1 = Math.max(radiusExtent[0], radiusExtent[1]);
+    var clockwise = angleAxisModel.get('clockwise');
+
+    for (var i = 1; i < ticksAngles.length; i++) {
+      var colorIndex = lineCount++ % areaColors.length;
+      splitAreas[colorIndex] = splitAreas[colorIndex] || [];
+      splitAreas[colorIndex].push(new Sector({
+        shape: {
+          cx: polar.cx,
+          cy: polar.cy,
+          r0: r0,
+          r: r1,
+          startAngle: prevAngle,
+          endAngle: -ticksAngles[i].coord * RADIAN,
+          clockwise: clockwise
+        },
+        silent: true
+      }));
+      prevAngle = -ticksAngles[i].coord * RADIAN;
+    } // Simple optimization
+    // Batching the lines if color are the same
+
+
+    for (var i = 0; i < splitAreas.length; i++) {
+      this.group.add(mergePath(splitAreas[i], {
+        style: defaults({
+          fill: areaColors[i % areaColors.length]
+        }, areaStyleModel.getAreaStyle()),
+        silent: true
+      }));
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var axisBuilderAttrs$2 = ['axisLine', 'axisTickLabel', 'axisName'];
+var selfBuilderAttrs$1 = ['splitLine', 'splitArea', 'minorSplitLine'];
+AxisView.extend({
+  type: 'radiusAxis',
+  axisPointerClass: 'PolarAxisPointer',
+  render: function (radiusAxisModel, ecModel) {
+    this.group.removeAll();
+
+    if (!radiusAxisModel.get('show')) {
+      return;
+    }
+
+    var radiusAxis = radiusAxisModel.axis;
+    var polar = radiusAxis.polar;
+    var angleAxis = polar.getAngleAxis();
+    var ticksCoords = radiusAxis.getTicksCoords();
+    var minorTicksCoords = radiusAxis.getMinorTicksCoords();
+    var axisAngle = angleAxis.getExtent()[0];
+    var radiusExtent = radiusAxis.getExtent();
+    var layout = layoutAxis(polar, radiusAxisModel, axisAngle);
+    var axisBuilder = new AxisBuilder(radiusAxisModel, layout);
+    each$1(axisBuilderAttrs$2, axisBuilder.add, axisBuilder);
+    this.group.add(axisBuilder.getGroup());
+    each$1(selfBuilderAttrs$1, function (name) {
+      if (radiusAxisModel.get(name + '.show') && !radiusAxis.scale.isBlank()) {
+        this['_' + name](radiusAxisModel, polar, axisAngle, radiusExtent, ticksCoords, minorTicksCoords);
+      }
+    }, this);
+  },
+
+  /**
+   * @private
+   */
+  _splitLine: function (radiusAxisModel, polar, axisAngle, radiusExtent, ticksCoords) {
+    var splitLineModel = radiusAxisModel.getModel('splitLine');
+    var lineStyleModel = splitLineModel.getModel('lineStyle');
+    var lineColors = lineStyleModel.get('color');
+    var lineCount = 0;
+    lineColors = lineColors instanceof Array ? lineColors : [lineColors];
+    var splitLines = [];
+
+    for (var i = 0; i < ticksCoords.length; i++) {
+      var colorIndex = lineCount++ % lineColors.length;
+      splitLines[colorIndex] = splitLines[colorIndex] || [];
+      splitLines[colorIndex].push(new Circle({
+        shape: {
+          cx: polar.cx,
+          cy: polar.cy,
+          r: ticksCoords[i].coord
+        }
+      }));
+    } // Simple optimization
+    // Batching the lines if color are the same
+
+
+    for (var i = 0; i < splitLines.length; i++) {
+      this.group.add(mergePath(splitLines[i], {
+        style: defaults({
+          stroke: lineColors[i % lineColors.length],
+          fill: null
+        }, lineStyleModel.getLineStyle()),
+        silent: true
+      }));
+    }
+  },
+
+  /**
+   * @private
+   */
+  _minorSplitLine: function (radiusAxisModel, polar, axisAngle, radiusExtent, ticksCoords, minorTicksCoords) {
+    if (!minorTicksCoords.length) {
+      return;
+    }
+
+    var minorSplitLineModel = radiusAxisModel.getModel('minorSplitLine');
+    var lineStyleModel = minorSplitLineModel.getModel('lineStyle');
+    var lines = [];
+
+    for (var i = 0; i < minorTicksCoords.length; i++) {
+      for (var k = 0; k < minorTicksCoords[i].length; k++) {
+        lines.push(new Circle({
+          shape: {
+            cx: polar.cx,
+            cy: polar.cy,
+            r: minorTicksCoords[i][k].coord
+          }
+        }));
+      }
+    }
+
+    this.group.add(mergePath(lines, {
+      style: defaults({
+        fill: null
+      }, lineStyleModel.getLineStyle()),
+      silent: true
+    }));
+  },
+
+  /**
+   * @private
+   */
+  _splitArea: function (radiusAxisModel, polar, axisAngle, radiusExtent, ticksCoords) {
+    if (!ticksCoords.length) {
+      return;
+    }
+
+    var splitAreaModel = radiusAxisModel.getModel('splitArea');
+    var areaStyleModel = splitAreaModel.getModel('areaStyle');
+    var areaColors = areaStyleModel.get('color');
+    var lineCount = 0;
+    areaColors = areaColors instanceof Array ? areaColors : [areaColors];
+    var splitAreas = [];
+    var prevRadius = ticksCoords[0].coord;
+
+    for (var i = 1; i < ticksCoords.length; i++) {
+      var colorIndex = lineCount++ % areaColors.length;
+      splitAreas[colorIndex] = splitAreas[colorIndex] || [];
+      splitAreas[colorIndex].push(new Sector({
+        shape: {
+          cx: polar.cx,
+          cy: polar.cy,
+          r0: prevRadius,
+          r: ticksCoords[i].coord,
+          startAngle: 0,
+          endAngle: Math.PI * 2
+        },
+        silent: true
+      }));
+      prevRadius = ticksCoords[i].coord;
+    } // Simple optimization
+    // Batching the lines if color are the same
+
+
+    for (var i = 0; i < splitAreas.length; i++) {
+      this.group.add(mergePath(splitAreas[i], {
+        style: defaults({
+          fill: areaColors[i % areaColors.length]
+        }, areaStyleModel.getAreaStyle()),
+        silent: true
+      }));
+    }
+  }
+});
+/**
+ * @inner
+ */
+
+function layoutAxis(polar, radiusAxisModel, axisAngle) {
+  return {
+    position: [polar.cx, polar.cy],
+    rotation: axisAngle / 180 * Math.PI,
+    labelDirection: -1,
+    tickDirection: -1,
+    nameDirection: 1,
+    labelRotate: radiusAxisModel.getModel('axisLabel').get('rotate'),
+    // Over splitLine and splitArea
+    z2: 1
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @param {Object} finder contains {seriesIndex, dataIndex, dataIndexInside}
+ * @param {module:echarts/model/Global} ecModel
+ * @return {Object} {point: [x, y], el: ...} point Will not be null.
+ */
+
+var findPointFromSeries = function (finder, ecModel) {
+  var point = [];
+  var seriesIndex = finder.seriesIndex;
+  var seriesModel;
+
+  if (seriesIndex == null || !(seriesModel = ecModel.getSeriesByIndex(seriesIndex))) {
+    return {
+      point: []
+    };
+  }
+
+  var data = seriesModel.getData();
+  var dataIndex = queryDataIndex(data, finder);
+
+  if (dataIndex == null || dataIndex < 0 || isArray(dataIndex)) {
+    return {
+      point: []
+    };
+  }
+
+  var el = data.getItemGraphicEl(dataIndex);
+  var coordSys = seriesModel.coordinateSystem;
+
+  if (seriesModel.getTooltipPosition) {
+    point = seriesModel.getTooltipPosition(dataIndex) || [];
+  } else if (coordSys && coordSys.dataToPoint) {
+    point = coordSys.dataToPoint(data.getValues(map(coordSys.dimensions, function (dim) {
+      return data.mapDimension(dim);
+    }), dataIndex, true)) || [];
+  } else if (el) {
+    // Use graphic bounding rect
+    var rect = el.getBoundingRect().clone();
+    rect.applyTransform(el.transform);
+    point = [rect.x + rect.width / 2, rect.y + rect.height / 2];
+  }
+
+  return {
+    point: point,
+    el: el
+  };
+};
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var each$11 = each$1;
+var curry$2 = curry;
+var inner$10 = makeInner();
+/**
+ * Basic logic: check all axis, if they do not demand show/highlight,
+ * then hide/downplay them.
+ *
+ * @param {Object} coordSysAxesInfo
+ * @param {Object} payload
+ * @param {string} [payload.currTrigger] 'click' | 'mousemove' | 'leave'
+ * @param {Array.<number>} [payload.x] x and y, which are mandatory, specify a point to
+ *              trigger axisPointer and tooltip.
+ * @param {Array.<number>} [payload.y] x and y, which are mandatory, specify a point to
+ *              trigger axisPointer and tooltip.
+ * @param {Object} [payload.seriesIndex] finder, optional, restrict target axes.
+ * @param {Object} [payload.dataIndex] finder, restrict target axes.
+ * @param {Object} [payload.axesInfo] finder, restrict target axes.
+ *        [{
+ *          axisDim: 'x'|'y'|'angle'|...,
+ *          axisIndex: ...,
+ *          value: ...
+ *        }, ...]
+ * @param {Function} [payload.dispatchAction]
+ * @param {Object} [payload.tooltipOption]
+ * @param {Object|Array.<number>|Function} [payload.position] Tooltip position,
+ *        which can be specified in dispatchAction
+ * @param {module:echarts/model/Global} ecModel
+ * @param {module:echarts/ExtensionAPI} api
+ * @return {Object} content of event obj for echarts.connect.
+ */
+
+var axisTrigger = function (payload, ecModel, api) {
+  var currTrigger = payload.currTrigger;
+  var point = [payload.x, payload.y];
+  var finder = payload;
+  var dispatchAction = payload.dispatchAction || bind(api.dispatchAction, api);
+  var coordSysAxesInfo = ecModel.getComponent('axisPointer').coordSysAxesInfo; // Pending
+  // See #6121. But we are not able to reproduce it yet.
+
+  if (!coordSysAxesInfo) {
+    return;
+  }
+
+  if (illegalPoint(point)) {
+    // Used in the default behavior of `connection`: use the sample seriesIndex
+    // and dataIndex. And also used in the tooltipView trigger.
+    point = findPointFromSeries({
+      seriesIndex: finder.seriesIndex,
+      // Do not use dataIndexInside from other ec instance.
+      // FIXME: auto detect it?
+      dataIndex: finder.dataIndex
+    }, ecModel).point;
+  }
+
+  var isIllegalPoint = illegalPoint(point); // Axis and value can be specified when calling dispatchAction({type: 'updateAxisPointer'}).
+  // Notice: In this case, it is difficult to get the `point` (which is necessary to show
+  // tooltip, so if point is not given, we just use the point found by sample seriesIndex
+  // and dataIndex.
+
+  var inputAxesInfo = finder.axesInfo;
+  var axesInfo = coordSysAxesInfo.axesInfo;
+  var shouldHide = currTrigger === 'leave' || illegalPoint(point);
+  var outputFinder = {};
+  var showValueMap = {};
+  var dataByCoordSys = {
+    list: [],
+    map: {}
+  };
+  var updaters = {
+    showPointer: curry$2(showPointer, showValueMap),
+    showTooltip: curry$2(showTooltip, dataByCoordSys)
+  }; // Process for triggered axes.
+
+  each$11(coordSysAxesInfo.coordSysMap, function (coordSys, coordSysKey) {
+    // If a point given, it must be contained by the coordinate system.
+    var coordSysContainsPoint = isIllegalPoint || coordSys.containPoint(point);
+    each$11(coordSysAxesInfo.coordSysAxesInfo[coordSysKey], function (axisInfo, key) {
+      var axis = axisInfo.axis;
+      var inputAxisInfo = findInputAxisInfo(inputAxesInfo, axisInfo); // If no inputAxesInfo, no axis is restricted.
+
+      if (!shouldHide && coordSysContainsPoint && (!inputAxesInfo || inputAxisInfo)) {
+        var val = inputAxisInfo && inputAxisInfo.value;
+
+        if (val == null && !isIllegalPoint) {
+          val = axis.pointToData(point);
+        }
+
+        val != null && processOnAxis(axisInfo, val, updaters, false, outputFinder);
+      }
+    });
+  }); // Process for linked axes.
+
+  var linkTriggers = {};
+  each$11(axesInfo, function (tarAxisInfo, tarKey) {
+    var linkGroup = tarAxisInfo.linkGroup; // If axis has been triggered in the previous stage, it should not be triggered by link.
+
+    if (linkGroup && !showValueMap[tarKey]) {
+      each$11(linkGroup.axesInfo, function (srcAxisInfo, srcKey) {
+        var srcValItem = showValueMap[srcKey]; // If srcValItem exist, source axis is triggered, so link to target axis.
+
+        if (srcAxisInfo !== tarAxisInfo && srcValItem) {
+          var val = srcValItem.value;
+          linkGroup.mapper && (val = tarAxisInfo.axis.scale.parse(linkGroup.mapper(val, makeMapperParam(srcAxisInfo), makeMapperParam(tarAxisInfo))));
+          linkTriggers[tarAxisInfo.key] = val;
+        }
+      });
+    }
+  });
+  each$11(linkTriggers, function (val, tarKey) {
+    processOnAxis(axesInfo[tarKey], val, updaters, true, outputFinder);
+  });
+  updateModelActually(showValueMap, axesInfo, outputFinder);
+  dispatchTooltipActually(dataByCoordSys, point, payload, dispatchAction);
+  dispatchHighDownActually(axesInfo, dispatchAction, api);
+  return outputFinder;
+};
+
+function processOnAxis(axisInfo, newValue, updaters, dontSnap, outputFinder) {
+  var axis = axisInfo.axis;
+
+  if (axis.scale.isBlank() || !axis.containData(newValue)) {
+    return;
+  }
+
+  if (!axisInfo.involveSeries) {
+    updaters.showPointer(axisInfo, newValue);
+    return;
+  } // Heavy calculation. So put it after axis.containData checking.
+
+
+  var payloadInfo = buildPayloadsBySeries(newValue, axisInfo);
+  var payloadBatch = payloadInfo.payloadBatch;
+  var snapToValue = payloadInfo.snapToValue; // Fill content of event obj for echarts.connect.
+  // By default use the first involved series data as a sample to connect.
+
+  if (payloadBatch[0] && outputFinder.seriesIndex == null) {
+    extend(outputFinder, payloadBatch[0]);
+  } // If no linkSource input, this process is for collecting link
+  // target, where snap should not be accepted.
+
+
+  if (!dontSnap && axisInfo.snap) {
+    if (axis.containData(snapToValue) && snapToValue != null) {
+      newValue = snapToValue;
+    }
+  }
+
+  updaters.showPointer(axisInfo, newValue, payloadBatch, outputFinder); // Tooltip should always be snapToValue, otherwise there will be
+  // incorrect "axis value ~ series value" mapping displayed in tooltip.
+
+  updaters.showTooltip(axisInfo, payloadInfo, snapToValue);
+}
+
+function buildPayloadsBySeries(value, axisInfo) {
+  var axis = axisInfo.axis;
+  var dim = axis.dim;
+  var snapToValue = value;
+  var payloadBatch = [];
+  var minDist = Number.MAX_VALUE;
+  var minDiff = -1;
+  each$11(axisInfo.seriesModels, function (series, idx) {
+    var dataDim = series.getData().mapDimension(dim, true);
+    var seriesNestestValue;
+    var dataIndices;
+
+    if (series.getAxisTooltipData) {
+      var result = series.getAxisTooltipData(dataDim, value, axis);
+      dataIndices = result.dataIndices;
+      seriesNestestValue = result.nestestValue;
+    } else {
+      dataIndices = series.getData().indicesOfNearest(dataDim[0], value, // Add a threshold to avoid find the wrong dataIndex
+      // when data length is not same.
+      // false,
+      axis.type === 'category' ? 0.5 : null);
+
+      if (!dataIndices.length) {
+        return;
+      }
+
+      seriesNestestValue = series.getData().get(dataDim[0], dataIndices[0]);
+    }
+
+    if (seriesNestestValue == null || !isFinite(seriesNestestValue)) {
+      return;
+    }
+
+    var diff = value - seriesNestestValue;
+    var dist = Math.abs(diff); // Consider category case
+
+    if (dist <= minDist) {
+      if (dist < minDist || diff >= 0 && minDiff < 0) {
+        minDist = dist;
+        minDiff = diff;
+        snapToValue = seriesNestestValue;
+        payloadBatch.length = 0;
+      }
+
+      each$11(dataIndices, function (dataIndex) {
+        payloadBatch.push({
+          seriesIndex: series.seriesIndex,
+          dataIndexInside: dataIndex,
+          dataIndex: series.getData().getRawIndex(dataIndex)
+        });
+      });
+    }
+  });
+  return {
+    payloadBatch: payloadBatch,
+    snapToValue: snapToValue
+  };
+}
+
+function showPointer(showValueMap, axisInfo, value, payloadBatch) {
+  showValueMap[axisInfo.key] = {
+    value: value,
+    payloadBatch: payloadBatch
+  };
+}
+
+function showTooltip(dataByCoordSys, axisInfo, payloadInfo, value) {
+  var payloadBatch = payloadInfo.payloadBatch;
+  var axis = axisInfo.axis;
+  var axisModel = axis.model;
+  var axisPointerModel = axisInfo.axisPointerModel; // If no data, do not create anything in dataByCoordSys,
+  // whose length will be used to judge whether dispatch action.
+
+  if (!axisInfo.triggerTooltip || !payloadBatch.length) {
+    return;
+  }
+
+  var coordSysModel = axisInfo.coordSys.model;
+  var coordSysKey = makeKey(coordSysModel);
+  var coordSysItem = dataByCoordSys.map[coordSysKey];
+
+  if (!coordSysItem) {
+    coordSysItem = dataByCoordSys.map[coordSysKey] = {
+      coordSysId: coordSysModel.id,
+      coordSysIndex: coordSysModel.componentIndex,
+      coordSysType: coordSysModel.type,
+      coordSysMainType: coordSysModel.mainType,
+      dataByAxis: []
+    };
+    dataByCoordSys.list.push(coordSysItem);
+  }
+
+  coordSysItem.dataByAxis.push({
+    axisDim: axis.dim,
+    axisIndex: axisModel.componentIndex,
+    axisType: axisModel.type,
+    axisId: axisModel.id,
+    value: value,
+    // Caustion: viewHelper.getValueLabel is actually on "view stage", which
+    // depends that all models have been updated. So it should not be performed
+    // here. Considering axisPointerModel used here is volatile, which is hard
+    // to be retrieve in TooltipView, we prepare parameters here.
+    valueLabelOpt: {
+      precision: axisPointerModel.get('label.precision'),
+      formatter: axisPointerModel.get('label.formatter')
+    },
+    seriesDataIndices: payloadBatch.slice()
+  });
+}
+
+function updateModelActually(showValueMap, axesInfo, outputFinder) {
+  var outputAxesInfo = outputFinder.axesInfo = []; // Basic logic: If no 'show' required, 'hide' this axisPointer.
+
+  each$11(axesInfo, function (axisInfo, key) {
+    var option = axisInfo.axisPointerModel.option;
+    var valItem = showValueMap[key];
+
+    if (valItem) {
+      !axisInfo.useHandle && (option.status = 'show');
+      option.value = valItem.value; // For label formatter param and highlight.
+
+      option.seriesDataIndices = (valItem.payloadBatch || []).slice();
+    } // When always show (e.g., handle used), remain
+    // original value and status.
+    else {
+        // If hide, value still need to be set, consider
+        // click legend to toggle axis blank.
+        !axisInfo.useHandle && (option.status = 'hide');
+      } // If status is 'hide', should be no info in payload.
+
+
+    option.status === 'show' && outputAxesInfo.push({
+      axisDim: axisInfo.axis.dim,
+      axisIndex: axisInfo.axis.model.componentIndex,
+      value: option.value
+    });
+  });
+}
+
+function dispatchTooltipActually(dataByCoordSys, point, payload, dispatchAction) {
+  // Basic logic: If no showTip required, hideTip will be dispatched.
+  if (illegalPoint(point) || !dataByCoordSys.list.length) {
+    dispatchAction({
+      type: 'hideTip'
+    });
+    return;
+  } // In most case only one axis (or event one series is used). It is
+  // convinient to fetch payload.seriesIndex and payload.dataIndex
+  // dirtectly. So put the first seriesIndex and dataIndex of the first
+  // axis on the payload.
+
+
+  var sampleItem = ((dataByCoordSys.list[0].dataByAxis[0] || {}).seriesDataIndices || [])[0] || {};
+  dispatchAction({
+    type: 'showTip',
+    escapeConnect: true,
+    x: point[0],
+    y: point[1],
+    tooltipOption: payload.tooltipOption,
+    position: payload.position,
+    dataIndexInside: sampleItem.dataIndexInside,
+    dataIndex: sampleItem.dataIndex,
+    seriesIndex: sampleItem.seriesIndex,
+    dataByCoordSys: dataByCoordSys.list
+  });
+}
+
+function dispatchHighDownActually(axesInfo, dispatchAction, api) {
+  // FIXME
+  // highlight status modification shoule be a stage of main process?
+  // (Consider confilct (e.g., legend and axisPointer) and setOption)
+  var zr = api.getZr();
+  var highDownKey = 'axisPointerLastHighlights';
+  var lastHighlights = inner$10(zr)[highDownKey] || {};
+  var newHighlights = inner$10(zr)[highDownKey] = {}; // Update highlight/downplay status according to axisPointer model.
+  // Build hash map and remove duplicate incidentally.
+
+  each$11(axesInfo, function (axisInfo, key) {
+    var option = axisInfo.axisPointerModel.option;
+    option.status === 'show' && each$11(option.seriesDataIndices, function (batchItem) {
+      var key = batchItem.seriesIndex + ' | ' + batchItem.dataIndex;
+      newHighlights[key] = batchItem;
+    });
+  }); // Diff.
+
+  var toHighlight = [];
+  var toDownplay = [];
+  each$1(lastHighlights, function (batchItem, key) {
+    !newHighlights[key] && toDownplay.push(batchItem);
+  });
+  each$1(newHighlights, function (batchItem, key) {
+    !lastHighlights[key] && toHighlight.push(batchItem);
+  });
+  toDownplay.length && api.dispatchAction({
+    type: 'downplay',
+    escapeConnect: true,
+    batch: toDownplay
+  });
+  toHighlight.length && api.dispatchAction({
+    type: 'highlight',
+    escapeConnect: true,
+    batch: toHighlight
+  });
+}
+
+function findInputAxisInfo(inputAxesInfo, axisInfo) {
+  for (var i = 0; i < (inputAxesInfo || []).length; i++) {
+    var inputAxisInfo = inputAxesInfo[i];
+
+    if (axisInfo.axis.dim === inputAxisInfo.axisDim && axisInfo.axis.model.componentIndex === inputAxisInfo.axisIndex) {
+      return inputAxisInfo;
+    }
+  }
+}
+
+function makeMapperParam(axisInfo) {
+  var axisModel = axisInfo.axis.model;
+  var item = {};
+  var dim = item.axisDim = axisInfo.axis.dim;
+  item.axisIndex = item[dim + 'AxisIndex'] = axisModel.componentIndex;
+  item.axisName = item[dim + 'AxisName'] = axisModel.name;
+  item.axisId = item[dim + 'AxisId'] = axisModel.id;
+  return item;
+}
+
+function illegalPoint(point) {
+  return !point || point[0] == null || isNaN(point[0]) || point[1] == null || isNaN(point[1]);
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var AxisPointerModel = extendComponentModel({
+  type: 'axisPointer',
+  coordSysAxesInfo: null,
+  defaultOption: {
+    // 'auto' means that show when triggered by tooltip or handle.
+    show: 'auto',
+    // 'click' | 'mousemove' | 'none'
+    triggerOn: null,
+    // set default in AxisPonterView.js
+    zlevel: 0,
+    z: 50,
+    type: 'line',
+    // 'line' 'shadow' 'cross' 'none'.
+    // axispointer triggered by tootip determine snap automatically,
+    // see `modelHelper`.
+    snap: false,
+    triggerTooltip: true,
+    value: null,
+    status: null,
+    // Init value depends on whether handle is used.
+    // [group0, group1, ...]
+    // Each group can be: {
+    //      mapper: function () {},
+    //      singleTooltip: 'multiple',  // 'multiple' or 'single'
+    //      xAxisId: ...,
+    //      yAxisName: ...,
+    //      angleAxisIndex: ...
+    // }
+    // mapper: can be ignored.
+    //      input: {axisInfo, value}
+    //      output: {axisInfo, value}
+    link: [],
+    // Do not set 'auto' here, otherwise global animation: false
+    // will not effect at this axispointer.
+    animation: null,
+    animationDurationUpdate: 200,
+    lineStyle: {
+      color: '#aaa',
+      width: 1,
+      type: 'solid'
+    },
+    shadowStyle: {
+      color: 'rgba(150,150,150,0.3)'
+    },
+    label: {
+      show: true,
+      formatter: null,
+      // string | Function
+      precision: 'auto',
+      // Or a number like 0, 1, 2 ...
+      margin: 3,
+      color: '#fff',
+      padding: [5, 7, 5, 7],
+      backgroundColor: 'auto',
+      // default: axis line color
+      borderColor: null,
+      borderWidth: 0,
+      shadowBlur: 3,
+      shadowColor: '#aaa' // Considering applicability, common style should
+      // better not have shadowOffset.
+      // shadowOffsetX: 0,
+      // shadowOffsetY: 2
+
+    },
+    handle: {
+      show: false,
+
+      /* eslint-disable */
+      icon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z',
+      // jshint ignore:line
+
+      /* eslint-enable */
+      size: 45,
+      // handle margin is from symbol center to axis, which is stable when circular move.
+      margin: 50,
+      // color: '#1b8bbd'
+      // color: '#2f4554'
+      color: '#333',
+      shadowBlur: 3,
+      shadowColor: '#aaa',
+      shadowOffsetX: 0,
+      shadowOffsetY: 2,
+      // For mobile performance
+      throttle: 40
+    }
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var inner$11 = makeInner();
+var each$12 = each$1;
+/**
+ * @param {string} key
+ * @param {module:echarts/ExtensionAPI} api
+ * @param {Function} handler
+ *      param: {string} currTrigger
+ *      param: {Array.<number>} point
+ */
+
+function register(key, api, handler) {
+  if (env$1.node) {
+    return;
+  }
+
+  var zr = api.getZr();
+  inner$11(zr).records || (inner$11(zr).records = {});
+  initGlobalListeners(zr, api);
+  var record = inner$11(zr).records[key] || (inner$11(zr).records[key] = {});
+  record.handler = handler;
+}
+
+function initGlobalListeners(zr, api) {
+  if (inner$11(zr).initialized) {
+    return;
+  }
+
+  inner$11(zr).initialized = true;
+  useHandler('click', curry(doEnter, 'click'));
+  useHandler('mousemove', curry(doEnter, 'mousemove')); // useHandler('mouseout', onLeave);
+
+  useHandler('globalout', onLeave);
+
+  function useHandler(eventType, cb) {
+    zr.on(eventType, function (e) {
+      var dis = makeDispatchAction(api);
+      each$12(inner$11(zr).records, function (record) {
+        record && cb(record, e, dis.dispatchAction);
+      });
+      dispatchTooltipFinally(dis.pendings, api);
+    });
+  }
+}
+
+function dispatchTooltipFinally(pendings, api) {
+  var showLen = pendings.showTip.length;
+  var hideLen = pendings.hideTip.length;
+  var actuallyPayload;
+
+  if (showLen) {
+    actuallyPayload = pendings.showTip[showLen - 1];
+  } else if (hideLen) {
+    actuallyPayload = pendings.hideTip[hideLen - 1];
+  }
+
+  if (actuallyPayload) {
+    actuallyPayload.dispatchAction = null;
+    api.dispatchAction(actuallyPayload);
+  }
+}
+
+function onLeave(record, e, dispatchAction) {
+  record.handler('leave', null, dispatchAction);
+}
+
+function doEnter(currTrigger, record, e, dispatchAction) {
+  record.handler(currTrigger, e, dispatchAction);
+}
+
+function makeDispatchAction(api) {
+  var pendings = {
+    showTip: [],
+    hideTip: []
+  }; // FIXME
+  // better approach?
+  // 'showTip' and 'hideTip' can be triggered by axisPointer and tooltip,
+  // which may be conflict, (axisPointer call showTip but tooltip call hideTip);
+  // So we have to add "final stage" to merge those dispatched actions.
+
+  var dispatchAction = function (payload) {
+    var pendingList = pendings[payload.type];
+
+    if (pendingList) {
+      pendingList.push(payload);
+    } else {
+      payload.dispatchAction = dispatchAction;
+      api.dispatchAction(payload);
+    }
+  };
+
+  return {
+    dispatchAction: dispatchAction,
+    pendings: pendings
+  };
+}
+/**
+ * @param {string} key
+ * @param {module:echarts/ExtensionAPI} api
+ */
+
+
+function unregister(key, api) {
+  if (env$1.node) {
+    return;
+  }
+
+  var zr = api.getZr();
+  var record = (inner$11(zr).records || {})[key];
+
+  if (record) {
+    inner$11(zr).records[key] = null;
+  }
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var AxisPointerView = extendComponentView({
+  type: 'axisPointer',
+  render: function (globalAxisPointerModel, ecModel, api) {
+    var globalTooltipModel = ecModel.getComponent('tooltip');
+    var triggerOn = globalAxisPointerModel.get('triggerOn') || globalTooltipModel && globalTooltipModel.get('triggerOn') || 'mousemove|click'; // Register global listener in AxisPointerView to enable
+    // AxisPointerView to be independent to Tooltip.
+
+    register('axisPointer', api, function (currTrigger, e, dispatchAction) {
+      // If 'none', it is not controlled by mouse totally.
+      if (triggerOn !== 'none' && (currTrigger === 'leave' || triggerOn.indexOf(currTrigger) >= 0)) {
+        dispatchAction({
+          type: 'updateAxisPointer',
+          currTrigger: currTrigger,
+          x: e && e.offsetX,
+          y: e && e.offsetY
+        });
+      }
+    });
+  },
+
+  /**
+   * @override
+   */
+  remove: function (ecModel, api) {
+    unregister(api.getZr(), 'axisPointer');
+    AxisPointerView.superApply(this._model, 'remove', arguments);
+  },
+
+  /**
+   * @override
+   */
+  dispose: function (ecModel, api) {
+    unregister('axisPointer', api);
+    AxisPointerView.superApply(this._model, 'dispose', arguments);
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var inner$12 = makeInner();
+var clone$4 = clone;
+var bind$2 = bind;
+/**
+ * Base axis pointer class in 2D.
+ * Implemenents {module:echarts/component/axis/IAxisPointer}.
+ */
+
+function BaseAxisPointer() {}
+
+BaseAxisPointer.prototype = {
+  /**
+   * @private
+   */
+  _group: null,
+
+  /**
+   * @private
+   */
+  _lastGraphicKey: null,
+
+  /**
+   * @private
+   */
+  _handle: null,
+
+  /**
+   * @private
+   */
+  _dragging: false,
+
+  /**
+   * @private
+   */
+  _lastValue: null,
+
+  /**
+   * @private
+   */
+  _lastStatus: null,
+
+  /**
+   * @private
+   */
+  _payloadInfo: null,
+
+  /**
+   * In px, arbitrary value. Do not set too small,
+   * no animation is ok for most cases.
+   * @protected
+   */
+  animationThreshold: 15,
+
+  /**
+   * @implement
+   */
+  render: function (axisModel, axisPointerModel, api, forceRender) {
+    var value = axisPointerModel.get('value');
+    var status = axisPointerModel.get('status'); // Bind them to `this`, not in closure, otherwise they will not
+    // be replaced when user calling setOption in not merge mode.
+
+    this._axisModel = axisModel;
+    this._axisPointerModel = axisPointerModel;
+    this._api = api; // Optimize: `render` will be called repeatly during mouse move.
+    // So it is power consuming if performing `render` each time,
+    // especially on mobile device.
+
+    if (!forceRender && this._lastValue === value && this._lastStatus === status) {
+      return;
+    }
+
+    this._lastValue = value;
+    this._lastStatus = status;
+    var group = this._group;
+    var handle = this._handle;
+
+    if (!status || status === 'hide') {
+      // Do not clear here, for animation better.
+      group && group.hide();
+      handle && handle.hide();
+      return;
+    }
+
+    group && group.show();
+    handle && handle.show(); // Otherwise status is 'show'
+
+    var elOption = {};
+    this.makeElOption(elOption, value, axisModel, axisPointerModel, api); // Enable change axis pointer type.
+
+    var graphicKey = elOption.graphicKey;
+
+    if (graphicKey !== this._lastGraphicKey) {
+      this.clear(api);
+    }
+
+    this._lastGraphicKey = graphicKey;
+    var moveAnimation = this._moveAnimation = this.determineAnimation(axisModel, axisPointerModel);
+
+    if (!group) {
+      group = this._group = new Group();
+      this.createPointerEl(group, elOption, axisModel, axisPointerModel);
+      this.createLabelEl(group, elOption, axisModel, axisPointerModel);
+      api.getZr().add(group);
+    } else {
+      var doUpdateProps = curry(updateProps$1, axisPointerModel, moveAnimation);
+      this.updatePointerEl(group, elOption, doUpdateProps, axisPointerModel);
+      this.updateLabelEl(group, elOption, doUpdateProps, axisPointerModel);
+    }
+
+    updateMandatoryProps(group, axisPointerModel, true);
+
+    this._renderHandle(value);
+  },
+
+  /**
+   * @implement
+   */
+  remove: function (api) {
+    this.clear(api);
+  },
+
+  /**
+   * @implement
+   */
+  dispose: function (api) {
+    this.clear(api);
+  },
+
+  /**
+   * @protected
+   */
+  determineAnimation: function (axisModel, axisPointerModel) {
+    var animation = axisPointerModel.get('animation');
+    var axis = axisModel.axis;
+    var isCategoryAxis = axis.type === 'category';
+    var useSnap = axisPointerModel.get('snap'); // Value axis without snap always do not snap.
+
+    if (!useSnap && !isCategoryAxis) {
+      return false;
+    }
+
+    if (animation === 'auto' || animation == null) {
+      var animationThreshold = this.animationThreshold;
+
+      if (isCategoryAxis && axis.getBandWidth() > animationThreshold) {
+        return true;
+      } // It is important to auto animation when snap used. Consider if there is
+      // a dataZoom, animation will be disabled when too many points exist, while
+      // it will be enabled for better visual effect when little points exist.
+
+
+      if (useSnap) {
+        var seriesDataCount = getAxisInfo(axisModel).seriesDataCount;
+        var axisExtent = axis.getExtent(); // Approximate band width
+
+        return Math.abs(axisExtent[0] - axisExtent[1]) / seriesDataCount > animationThreshold;
+      }
+
+      return false;
+    }
+
+    return animation === true;
+  },
+
+  /**
+   * add {pointer, label, graphicKey} to elOption
+   * @protected
+   */
+  makeElOption: function (elOption, value, axisModel, axisPointerModel, api) {// Shoule be implemenented by sub-class.
+  },
+
+  /**
+   * @protected
+   */
+  createPointerEl: function (group, elOption, axisModel, axisPointerModel) {
+    var pointerOption = elOption.pointer;
+
+    if (pointerOption) {
+      var pointerEl = inner$12(group).pointerEl = new graphic[pointerOption.type](clone$4(elOption.pointer));
+      group.add(pointerEl);
+    }
+  },
+
+  /**
+   * @protected
+   */
+  createLabelEl: function (group, elOption, axisModel, axisPointerModel) {
+    if (elOption.label) {
+      var labelEl = inner$12(group).labelEl = new Rect(clone$4(elOption.label));
+      group.add(labelEl);
+      updateLabelShowHide(labelEl, axisPointerModel);
+    }
+  },
+
+  /**
+   * @protected
+   */
+  updatePointerEl: function (group, elOption, updateProps$$1) {
+    var pointerEl = inner$12(group).pointerEl;
+
+    if (pointerEl && elOption.pointer) {
+      pointerEl.setStyle(elOption.pointer.style);
+      updateProps$$1(pointerEl, {
+        shape: elOption.pointer.shape
+      });
+    }
+  },
+
+  /**
+   * @protected
+   */
+  updateLabelEl: function (group, elOption, updateProps$$1, axisPointerModel) {
+    var labelEl = inner$12(group).labelEl;
+
+    if (labelEl) {
+      labelEl.setStyle(elOption.label.style);
+      updateProps$$1(labelEl, {
+        // Consider text length change in vertical axis, animation should
+        // be used on shape, otherwise the effect will be weird.
+        shape: elOption.label.shape,
+        position: elOption.label.position
+      });
+      updateLabelShowHide(labelEl, axisPointerModel);
+    }
+  },
+
+  /**
+   * @private
+   */
+  _renderHandle: function (value) {
+    if (this._dragging || !this.updateHandleTransform) {
+      return;
+    }
+
+    var axisPointerModel = this._axisPointerModel;
+
+    var zr = this._api.getZr();
+
+    var handle = this._handle;
+    var handleModel = axisPointerModel.getModel('handle');
+    var status = axisPointerModel.get('status');
+
+    if (!handleModel.get('show') || !status || status === 'hide') {
+      handle && zr.remove(handle);
+      this._handle = null;
+      return;
+    }
+
+    var isInit;
+
+    if (!this._handle) {
+      isInit = true;
+      handle = this._handle = createIcon(handleModel.get('icon'), {
+        cursor: 'move',
+        draggable: true,
+        onmousemove: function (e) {
+          // Fot mobile devicem, prevent screen slider on the button.
+          stop(e.event);
+        },
+        onmousedown: bind$2(this._onHandleDragMove, this, 0, 0),
+        drift: bind$2(this._onHandleDragMove, this),
+        ondragend: bind$2(this._onHandleDragEnd, this)
+      });
+      zr.add(handle);
+    }
+
+    updateMandatoryProps(handle, axisPointerModel, false); // update style
+
+    var includeStyles = ['color', 'borderColor', 'borderWidth', 'opacity', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY'];
+    handle.setStyle(handleModel.getItemStyle(null, includeStyles)); // update position
+
+    var handleSize = handleModel.get('size');
+
+    if (!isArray(handleSize)) {
+      handleSize = [handleSize, handleSize];
+    }
+
+    handle.attr('scale', [handleSize[0] / 2, handleSize[1] / 2]);
+    createOrUpdate(this, '_doDispatchAxisPointer', handleModel.get('throttle') || 0, 'fixRate');
+
+    this._moveHandleToValue(value, isInit);
+  },
+
+  /**
+   * @private
+   */
+  _moveHandleToValue: function (value, isInit) {
+    updateProps$1(this._axisPointerModel, !isInit && this._moveAnimation, this._handle, getHandleTransProps(this.getHandleTransform(value, this._axisModel, this._axisPointerModel)));
+  },
+
+  /**
+   * @private
+   */
+  _onHandleDragMove: function (dx, dy) {
+    var handle = this._handle;
+
+    if (!handle) {
+      return;
+    }
+
+    this._dragging = true; // Persistent for throttle.
+
+    var trans = this.updateHandleTransform(getHandleTransProps(handle), [dx, dy], this._axisModel, this._axisPointerModel);
+    this._payloadInfo = trans;
+    handle.stopAnimation();
+    handle.attr(getHandleTransProps(trans));
+    inner$12(handle).lastProp = null;
+
+    this._doDispatchAxisPointer();
+  },
+
+  /**
+   * Throttled method.
+   * @private
+   */
+  _doDispatchAxisPointer: function () {
+    var handle = this._handle;
+
+    if (!handle) {
+      return;
+    }
+
+    var payloadInfo = this._payloadInfo;
+    var axisModel = this._axisModel;
+
+    this._api.dispatchAction({
+      type: 'updateAxisPointer',
+      x: payloadInfo.cursorPoint[0],
+      y: payloadInfo.cursorPoint[1],
+      tooltipOption: payloadInfo.tooltipOption,
+      axesInfo: [{
+        axisDim: axisModel.axis.dim,
+        axisIndex: axisModel.componentIndex
+      }]
+    });
+  },
+
+  /**
+   * @private
+   */
+  _onHandleDragEnd: function (moveAnimation) {
+    this._dragging = false;
+    var handle = this._handle;
+
+    if (!handle) {
+      return;
+    }
+
+    var value = this._axisPointerModel.get('value'); // Consider snap or categroy axis, handle may be not consistent with
+    // axisPointer. So move handle to align the exact value position when
+    // drag ended.
+
+
+    this._moveHandleToValue(value); // For the effect: tooltip will be shown when finger holding on handle
+    // button, and will be hidden after finger left handle button.
+
+
+    this._api.dispatchAction({
+      type: 'hideTip'
+    });
+  },
+
+  /**
+   * Should be implemenented by sub-class if support `handle`.
+   * @protected
+   * @param {number} value
+   * @param {module:echarts/model/Model} axisModel
+   * @param {module:echarts/model/Model} axisPointerModel
+   * @return {Object} {position: [x, y], rotation: 0}
+   */
+  getHandleTransform: null,
+
+  /**
+   * * Should be implemenented by sub-class if support `handle`.
+   * @protected
+   * @param {Object} transform {position, rotation}
+   * @param {Array.<number>} delta [dx, dy]
+   * @param {module:echarts/model/Model} axisModel
+   * @param {module:echarts/model/Model} axisPointerModel
+   * @return {Object} {position: [x, y], rotation: 0, cursorPoint: [x, y]}
+   */
+  updateHandleTransform: null,
+
+  /**
+   * @private
+   */
+  clear: function (api) {
+    this._lastValue = null;
+    this._lastStatus = null;
+    var zr = api.getZr();
+    var group = this._group;
+    var handle = this._handle;
+
+    if (zr && group) {
+      this._lastGraphicKey = null;
+      group && zr.remove(group);
+      handle && zr.remove(handle);
+      this._group = null;
+      this._handle = null;
+      this._payloadInfo = null;
+    }
+  },
+
+  /**
+   * @protected
+   */
+  doClear: function () {// Implemented by sub-class if necessary.
+  },
+
+  /**
+   * @protected
+   * @param {Array.<number>} xy
+   * @param {Array.<number>} wh
+   * @param {number} [xDimIndex=0] or 1
+   */
+  buildLabel: function (xy, wh, xDimIndex) {
+    xDimIndex = xDimIndex || 0;
+    return {
+      x: xy[xDimIndex],
+      y: xy[1 - xDimIndex],
+      width: wh[xDimIndex],
+      height: wh[1 - xDimIndex]
+    };
+  }
+};
+BaseAxisPointer.prototype.constructor = BaseAxisPointer;
+
+function updateProps$1(animationModel, moveAnimation, el, props) {
+  // Animation optimize.
+  if (!propsEqual(inner$12(el).lastProp, props)) {
+    inner$12(el).lastProp = props;
+    moveAnimation ? updateProps(el, props, animationModel) : (el.stopAnimation(), el.attr(props));
+  }
+}
+
+function propsEqual(lastProps, newProps) {
+  if (isObject$1(lastProps) && isObject$1(newProps)) {
+    var equals = true;
+    each$1(newProps, function (item, key) {
+      equals = equals && propsEqual(lastProps[key], item);
+    });
+    return !!equals;
+  } else {
+    return lastProps === newProps;
+  }
+}
+
+function updateLabelShowHide(labelEl, axisPointerModel) {
+  labelEl[axisPointerModel.get('label.show') ? 'show' : 'hide']();
+}
+
+function getHandleTransProps(trans) {
+  return {
+    position: trans.position.slice(),
+    rotation: trans.rotation || 0
+  };
+}
+
+function updateMandatoryProps(group, axisPointerModel, silent) {
+  var z = axisPointerModel.get('z');
+  var zlevel = axisPointerModel.get('zlevel');
+  group && group.traverse(function (el) {
+    if (el.type !== 'group') {
+      z != null && (el.z = z);
+      zlevel != null && (el.zlevel = zlevel);
+      el.silent = silent;
+    }
+  });
+}
+
+enableClassExtend(BaseAxisPointer);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+/**
+ * @param {module:echarts/model/Model} axisPointerModel
+ */
+
+function buildElStyle(axisPointerModel) {
+  var axisPointerType = axisPointerModel.get('type');
+  var styleModel = axisPointerModel.getModel(axisPointerType + 'Style');
+  var style;
+
+  if (axisPointerType === 'line') {
+    style = styleModel.getLineStyle();
+    style.fill = null;
+  } else if (axisPointerType === 'shadow') {
+    style = styleModel.getAreaStyle();
+    style.stroke = null;
+  }
+
+  return style;
+}
+/**
+ * @param {Function} labelPos {align, verticalAlign, position}
+ */
+
+function buildLabelElOption(elOption, axisModel, axisPointerModel, api, labelPos) {
+  var value = axisPointerModel.get('value');
+  var text = getValueLabel(value, axisModel.axis, axisModel.ecModel, axisPointerModel.get('seriesDataIndices'), {
+    precision: axisPointerModel.get('label.precision'),
+    formatter: axisPointerModel.get('label.formatter')
+  });
+  var labelModel = axisPointerModel.getModel('label');
+  var paddings = normalizeCssArray$1(labelModel.get('padding') || 0);
+  var font = labelModel.getFont();
+  var textRect = getBoundingRect(text, font);
+  var position = labelPos.position;
+  var width = textRect.width + paddings[1] + paddings[3];
+  var height = textRect.height + paddings[0] + paddings[2]; // Adjust by align.
+
+  var align = labelPos.align;
+  align === 'right' && (position[0] -= width);
+  align === 'center' && (position[0] -= width / 2);
+  var verticalAlign = labelPos.verticalAlign;
+  verticalAlign === 'bottom' && (position[1] -= height);
+  verticalAlign === 'middle' && (position[1] -= height / 2); // Not overflow ec container
+
+  confineInContainer(position, width, height, api);
+  var bgColor = labelModel.get('backgroundColor');
+
+  if (!bgColor || bgColor === 'auto') {
+    bgColor = axisModel.get('axisLine.lineStyle.color');
+  }
+
+  elOption.label = {
+    shape: {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+      r: labelModel.get('borderRadius')
+    },
+    position: position.slice(),
+    // TODO: rich
+    style: {
+      text: text,
+      textFont: font,
+      textFill: labelModel.getTextColor(),
+      textPosition: 'inside',
+      textPadding: paddings,
+      fill: bgColor,
+      stroke: labelModel.get('borderColor') || 'transparent',
+      lineWidth: labelModel.get('borderWidth') || 0,
+      shadowBlur: labelModel.get('shadowBlur'),
+      shadowColor: labelModel.get('shadowColor'),
+      shadowOffsetX: labelModel.get('shadowOffsetX'),
+      shadowOffsetY: labelModel.get('shadowOffsetY')
+    },
+    // Lable should be over axisPointer.
+    z2: 10
+  };
+} // Do not overflow ec container
+
+function confineInContainer(position, width, height, api) {
+  var viewWidth = api.getWidth();
+  var viewHeight = api.getHeight();
+  position[0] = Math.min(position[0] + width, viewWidth) - width;
+  position[1] = Math.min(position[1] + height, viewHeight) - height;
+  position[0] = Math.max(position[0], 0);
+  position[1] = Math.max(position[1], 0);
+}
+/**
+ * @param {number} value
+ * @param {module:echarts/coord/Axis} axis
+ * @param {module:echarts/model/Global} ecModel
+ * @param {Object} opt
+ * @param {Array.<Object>} seriesDataIndices
+ * @param {number|string} opt.precision 'auto' or a number
+ * @param {string|Function} opt.formatter label formatter
+ */
+
+
+function getValueLabel(value, axis, ecModel, seriesDataIndices, opt) {
+  value = axis.scale.parse(value);
+  var text = axis.scale.getLabel( // If `precision` is set, width can be fixed (like '12.00500'), which
+  // helps to debounce when when moving label.
+  value, {
+    precision: opt.precision
+  });
+  var formatter = opt.formatter;
+
+  if (formatter) {
+    var params = {
+      value: getAxisRawValue(axis, value),
+      axisDimension: axis.dim,
+      axisIndex: axis.index,
+      seriesData: []
+    };
+    each$1(seriesDataIndices, function (idxItem) {
+      var series = ecModel.getSeriesByIndex(idxItem.seriesIndex);
+      var dataIndex = idxItem.dataIndexInside;
+      var dataParams = series && series.getDataParams(dataIndex);
+      dataParams && params.seriesData.push(dataParams);
+    });
+
+    if (isString(formatter)) {
+      text = formatter.replace('{value}', text);
+    } else if (isFunction$1(formatter)) {
+      text = formatter(params);
+    }
+  }
+
+  return text;
+}
+/**
+ * @param {module:echarts/coord/Axis} axis
+ * @param {number} value
+ * @param {Object} layoutInfo {
+ *  rotation, position, labelOffset, labelDirection, labelMargin
+ * }
+ */
+
+function getTransformedPosition(axis, value, layoutInfo) {
+  var transform = create$1();
+  rotate(transform, transform, layoutInfo.rotation);
+  translate(transform, transform, layoutInfo.position);
+  return applyTransform$1([axis.dataToCoord(value), (layoutInfo.labelOffset || 0) + (layoutInfo.labelDirection || 1) * (layoutInfo.labelMargin || 0)], transform);
+}
+function buildCartesianSingleLabelElOption(value, elOption, layoutInfo, axisModel, axisPointerModel, api) {
+  var textLayout = AxisBuilder.innerTextLayout(layoutInfo.rotation, 0, layoutInfo.labelDirection);
+  layoutInfo.labelMargin = axisPointerModel.get('label.margin');
+  buildLabelElOption(elOption, axisModel, axisPointerModel, api, {
+    position: getTransformedPosition(axisModel.axis, value, layoutInfo),
+    align: textLayout.textAlign,
+    verticalAlign: textLayout.textVerticalAlign
+  });
+}
+/**
+ * @param {Array.<number>} p1
+ * @param {Array.<number>} p2
+ * @param {number} [xDimIndex=0] or 1
+ */
+
+function makeLineShape(p1, p2, xDimIndex) {
+  xDimIndex = xDimIndex || 0;
+  return {
+    x1: p1[xDimIndex],
+    y1: p1[1 - xDimIndex],
+    x2: p2[xDimIndex],
+    y2: p2[1 - xDimIndex]
+  };
+}
+/**
+ * @param {Array.<number>} xy
+ * @param {Array.<number>} wh
+ * @param {number} [xDimIndex=0] or 1
+ */
+
+function makeRectShape(xy, wh, xDimIndex) {
+  xDimIndex = xDimIndex || 0;
+  return {
+    x: xy[xDimIndex],
+    y: xy[1 - xDimIndex],
+    width: wh[xDimIndex],
+    height: wh[1 - xDimIndex]
+  };
+}
+function makeSectorShape(cx, cy, r0, r, startAngle, endAngle) {
+  return {
+    cx: cx,
+    cy: cy,
+    r0: r0,
+    r: r,
+    startAngle: startAngle,
+    endAngle: endAngle,
+    clockwise: true
+  };
+}
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var CartesianAxisPointer = BaseAxisPointer.extend({
+  /**
+   * @override
+   */
+  makeElOption: function (elOption, value, axisModel, axisPointerModel, api) {
+    var axis = axisModel.axis;
+    var grid = axis.grid;
+    var axisPointerType = axisPointerModel.get('type');
+    var otherExtent = getCartesian(grid, axis).getOtherAxis(axis).getGlobalExtent();
+    var pixelValue = axis.toGlobalCoord(axis.dataToCoord(value, true));
+
+    if (axisPointerType && axisPointerType !== 'none') {
+      var elStyle = buildElStyle(axisPointerModel);
+      var pointerOption = pointerShapeBuilder[axisPointerType](axis, pixelValue, otherExtent);
+      pointerOption.style = elStyle;
+      elOption.graphicKey = pointerOption.type;
+      elOption.pointer = pointerOption;
+    }
+
+    var layoutInfo = layout$1(grid.model, axisModel);
+    buildCartesianSingleLabelElOption(value, elOption, layoutInfo, axisModel, axisPointerModel, api);
+  },
+
+  /**
+   * @override
+   */
+  getHandleTransform: function (value, axisModel, axisPointerModel) {
+    var layoutInfo = layout$1(axisModel.axis.grid.model, axisModel, {
+      labelInside: false
+    });
+    layoutInfo.labelMargin = axisPointerModel.get('handle.margin');
+    return {
+      position: getTransformedPosition(axisModel.axis, value, layoutInfo),
+      rotation: layoutInfo.rotation + (layoutInfo.labelDirection < 0 ? Math.PI : 0)
+    };
+  },
+
+  /**
+   * @override
+   */
+  updateHandleTransform: function (transform, delta, axisModel, axisPointerModel) {
+    var axis = axisModel.axis;
+    var grid = axis.grid;
+    var axisExtent = axis.getGlobalExtent(true);
+    var otherExtent = getCartesian(grid, axis).getOtherAxis(axis).getGlobalExtent();
+    var dimIndex = axis.dim === 'x' ? 0 : 1;
+    var currPosition = transform.position;
+    currPosition[dimIndex] += delta[dimIndex];
+    currPosition[dimIndex] = Math.min(axisExtent[1], currPosition[dimIndex]);
+    currPosition[dimIndex] = Math.max(axisExtent[0], currPosition[dimIndex]);
+    var cursorOtherValue = (otherExtent[1] + otherExtent[0]) / 2;
+    var cursorPoint = [cursorOtherValue, cursorOtherValue];
+    cursorPoint[dimIndex] = currPosition[dimIndex]; // Make tooltip do not overlap axisPointer and in the middle of the grid.
+
+    var tooltipOptions = [{
+      verticalAlign: 'middle'
+    }, {
+      align: 'center'
+    }];
+    return {
+      position: currPosition,
+      rotation: transform.rotation,
+      cursorPoint: cursorPoint,
+      tooltipOption: tooltipOptions[dimIndex]
+    };
+  }
+});
+
+function getCartesian(grid, axis) {
+  var opt = {};
+  opt[axis.dim + 'AxisIndex'] = axis.index;
+  return grid.getCartesian(opt);
+}
+
+var pointerShapeBuilder = {
+  line: function (axis, pixelValue, otherExtent) {
+    var targetShape = makeLineShape([pixelValue, otherExtent[0]], [pixelValue, otherExtent[1]], getAxisDimIndex(axis));
+    return {
+      type: 'Line',
+      subPixelOptimize: true,
+      shape: targetShape
+    };
+  },
+  shadow: function (axis, pixelValue, otherExtent) {
+    var bandWidth = Math.max(1, axis.getBandWidth());
+    var span = otherExtent[1] - otherExtent[0];
+    return {
+      type: 'Rect',
+      shape: makeRectShape([pixelValue - bandWidth / 2, otherExtent[0]], [bandWidth, span], getAxisDimIndex(axis))
+    };
+  }
+};
+
+function getAxisDimIndex(axis) {
+  return axis.dim === 'x' ? 0 : 1;
+}
+
+AxisView.registerAxisPointerClass('CartesianAxisPointer', CartesianAxisPointer);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+// echarts.simple.js and online build tooltip, which only require gridSimple,
+// CartesianAxisPointer should be able to required somewhere.
+
+registerPreprocessor(function (option) {
+  // Always has a global axisPointerModel for default setting.
+  if (option) {
+    (!option.axisPointer || option.axisPointer.length === 0) && (option.axisPointer = {});
+    var link = option.axisPointer.link; // Normalize to array to avoid object mergin. But if link
+    // is not set, remain null/undefined, otherwise it will
+    // override existent link setting.
+
+    if (link && !isArray(link)) {
+      option.axisPointer.link = [link];
+    }
+  }
+}); // This process should proformed after coordinate systems created
+// and series data processed. So put it on statistic processing stage.
+
+registerProcessor(PRIORITY.PROCESSOR.STATISTIC, function (ecModel, api) {
+  // Build axisPointerModel, mergin tooltip.axisPointer model for each axis.
+  // allAxesInfo should be updated when setOption performed.
+  ecModel.getComponent('axisPointer').coordSysAxesInfo = collect(ecModel, api);
+}); // Broadcast to all views.
+
+registerAction({
+  type: 'updateAxisPointer',
+  event: 'updateAxisPointer',
+  update: ':updateAxisPointer'
+}, axisTrigger);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var PolarAxisPointer = BaseAxisPointer.extend({
+  /**
+   * @override
+   */
+  makeElOption: function (elOption, value, axisModel, axisPointerModel, api) {
+    var axis = axisModel.axis;
+
+    if (axis.dim === 'angle') {
+      this.animationThreshold = Math.PI / 18;
+    }
+
+    var polar = axis.polar;
+    var otherAxis = polar.getOtherAxis(axis);
+    var otherExtent = otherAxis.getExtent();
+    var coordValue;
+    coordValue = axis['dataTo' + capitalFirst(axis.dim)](value);
+    var axisPointerType = axisPointerModel.get('type');
+
+    if (axisPointerType && axisPointerType !== 'none') {
+      var elStyle = buildElStyle(axisPointerModel);
+      var pointerOption = pointerShapeBuilder$1[axisPointerType](axis, polar, coordValue, otherExtent, elStyle);
+      pointerOption.style = elStyle;
+      elOption.graphicKey = pointerOption.type;
+      elOption.pointer = pointerOption;
+    }
+
+    var labelMargin = axisPointerModel.get('label.margin');
+    var labelPos = getLabelPosition(value, axisModel, axisPointerModel, polar, labelMargin);
+    buildLabelElOption(elOption, axisModel, axisPointerModel, api, labelPos);
+  } // Do not support handle, utill any user requires it.
+
+});
+
+function getLabelPosition(value, axisModel, axisPointerModel, polar, labelMargin) {
+  var axis = axisModel.axis;
+  var coord = axis.dataToCoord(value);
+  var axisAngle = polar.getAngleAxis().getExtent()[0];
+  axisAngle = axisAngle / 180 * Math.PI;
+  var radiusExtent = polar.getRadiusAxis().getExtent();
+  var position;
+  var align;
+  var verticalAlign;
+
+  if (axis.dim === 'radius') {
+    var transform = create$1();
+    rotate(transform, transform, axisAngle);
+    translate(transform, transform, [polar.cx, polar.cy]);
+    position = applyTransform$1([coord, -labelMargin], transform);
+    var labelRotation = axisModel.getModel('axisLabel').get('rotate') || 0;
+    var labelLayout = AxisBuilder.innerTextLayout(axisAngle, labelRotation * Math.PI / 180, -1);
+    align = labelLayout.textAlign;
+    verticalAlign = labelLayout.textVerticalAlign;
+  } else {
+    // angle axis
+    var r = radiusExtent[1];
+    position = polar.coordToPoint([r + labelMargin, coord]);
+    var cx = polar.cx;
+    var cy = polar.cy;
+    align = Math.abs(position[0] - cx) / r < 0.3 ? 'center' : position[0] > cx ? 'left' : 'right';
+    verticalAlign = Math.abs(position[1] - cy) / r < 0.3 ? 'middle' : position[1] > cy ? 'top' : 'bottom';
+  }
+
+  return {
+    position: position,
+    align: align,
+    verticalAlign: verticalAlign
+  };
+}
+
+var pointerShapeBuilder$1 = {
+  line: function (axis, polar, coordValue, otherExtent, elStyle) {
+    return axis.dim === 'angle' ? {
+      type: 'Line',
+      shape: makeLineShape(polar.coordToPoint([otherExtent[0], coordValue]), polar.coordToPoint([otherExtent[1], coordValue]))
+    } : {
+      type: 'Circle',
+      shape: {
+        cx: polar.cx,
+        cy: polar.cy,
+        r: coordValue
+      }
+    };
+  },
+  shadow: function (axis, polar, coordValue, otherExtent, elStyle) {
+    var bandWidth = Math.max(1, axis.getBandWidth());
+    var radian = Math.PI / 180;
+    return axis.dim === 'angle' ? {
+      type: 'Sector',
+      shape: makeSectorShape(polar.cx, polar.cy, otherExtent[0], otherExtent[1], // In ECharts y is negative if angle is positive
+      (-coordValue - bandWidth / 2) * radian, (-coordValue + bandWidth / 2) * radian)
+    } : {
+      type: 'Sector',
+      shape: makeSectorShape(polar.cx, polar.cy, coordValue - bandWidth / 2, coordValue + bandWidth / 2, 0, Math.PI * 2)
+    };
+  }
+};
+AxisView.registerAxisPointerClass('PolarAxisPointer', PolarAxisPointer);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+registerLayout(curry(barLayoutPolar, 'bar')); // Polar view
+
+extendComponentView({
+  type: 'polar'
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+var GeoModel = ComponentModel.extend({
+  type: 'geo',
+
+  /**
+   * @type {module:echarts/coord/geo/Geo}
+   */
+  coordinateSystem: null,
+  layoutMode: 'box',
+  init: function (option) {
+    ComponentModel.prototype.init.apply(this, arguments); // Default label emphasis `show`
+
+    defaultEmphasis(option, 'label', ['show']);
+  },
+  optionUpdated: function () {
+    var option = this.option;
+    var self = this;
+    option.regions = geoCreator.getFilledRegions(option.regions, option.map, option.nameMap);
+    this._optionModelMap = reduce(option.regions || [], function (optionModelMap, regionOpt) {
+      if (regionOpt.name) {
+        optionModelMap.set(regionOpt.name, new Model(regionOpt, self));
+      }
+
+      return optionModelMap;
+    }, createHashMap());
+    this.updateSelectedMap(option.regions);
+  },
+  defaultOption: {
+    zlevel: 0,
+    z: 0,
+    show: true,
+    left: 'center',
+    top: 'center',
+    // width:,
+    // height:,
+    // right
+    // bottom
+    // Aspect is width / height. Inited to be geoJson bbox aspect
+    // This parameter is used for scale this aspect
+    // If svg used, aspectScale is 1 by default.
+    // aspectScale: 0.75,
+    aspectScale: null,
+    ///// Layout with center and size
+    // If you wan't to put map in a fixed size box with right aspect ratio
+    // This two properties may more conveninet
+    // layoutCenter: [50%, 50%]
+    // layoutSize: 100
+    silent: false,
+    // Map type
+    map: '',
+    // Define left-top, right-bottom coords to control view
+    // For example, [ [180, 90], [-180, -90] ]
+    boundingCoords: null,
+    // Default on center of map
+    center: null,
+    zoom: 1,
+    scaleLimit: null,
+    // selectedMode: false
+    label: {
+      show: false,
+      color: '#000'
+    },
+    itemStyle: {
+      // color: 各异,
+      borderWidth: 0.5,
+      borderColor: '#444',
+      color: '#eee'
+    },
+    emphasis: {
+      label: {
+        show: true,
+        color: 'rgb(100,0,0)'
+      },
+      itemStyle: {
+        color: 'rgba(255,215,0,0.8)'
+      }
+    },
+    regions: []
+  },
+
+  /**
+   * Get model of region
+   * @param  {string} name
+   * @return {module:echarts/model/Model}
+   */
+  getRegionModel: function (name) {
+    return this._optionModelMap.get(name) || new Model(null, this, this.ecModel);
+  },
+
+  /**
+   * Format label
+   * @param {string} name Region name
+   * @param {string} [status='normal'] 'normal' or 'emphasis'
+   * @return {string}
+   */
+  getFormattedLabel: function (name, status) {
+    status = status || 'normal';
+    var regionModel = this.getRegionModel(name);
+    var formatter = regionModel.get((status === 'normal' ? '' : status + '.') + 'label.formatter');
+    var params = {
+      name: name
+    };
+
+    if (typeof formatter === 'function') {
+      params.status = status;
+      return formatter(params);
+    } else if (typeof formatter === 'string') {
+      return formatter.replace('{a}', name != null ? name : '');
+    }
+  },
+  setZoom: function (zoom) {
+    this.option.zoom = zoom;
+  },
+  setCenter: function (center) {
+    this.option.center = center;
+  }
+});
+mixin(GeoModel, selectableMixin);
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+extendComponentView({
+  type: 'geo',
+  init: function (ecModel, api) {
+    var mapDraw = new MapDraw(api, true);
+    this._mapDraw = mapDraw;
+    this.group.add(mapDraw.group);
+  },
+  render: function (geoModel, ecModel, api, payload) {
+    // Not render if it is an toggleSelect action from self
+    if (payload && payload.type === 'geoToggleSelect' && payload.from === this.uid) {
+      return;
+    }
+
+    var mapDraw = this._mapDraw;
+
+    if (geoModel.get('show')) {
+      mapDraw.draw(geoModel, ecModel, api, this, payload);
+    } else {
+      this._mapDraw.group.removeAll();
+    }
+
+    this.group.silent = geoModel.get('silent');
+  },
+  dispose: function () {
+    this._mapDraw && this._mapDraw.remove();
+  }
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
+function makeAction(method, actionInfo) {
+  actionInfo.update = 'updateView';
+  registerAction(actionInfo, function (payload, ecModel) {
+    var selected = {};
+    ecModel.eachComponent({
+      mainType: 'geo',
+      query: payload
+    }, function (geoModel) {
+      geoModel[method](payload.name);
+      var geo = geoModel.coordinateSystem;
+      each$1(geo.regions, function (region) {
+        selected[region.name] = geoModel.isSelected(region.name) || false;
+      });
+    });
+    return {
+      selected: selected,
+      name: payload.name
+    };
+  });
+}
+
+makeAction('toggleSelected', {
+  type: 'geoToggleSelect',
+  event: 'geoselectchanged'
+});
+makeAction('select', {
+  type: 'geoSelect',
+  event: 'geoselected'
+});
+makeAction('unSelect', {
+  type: 'geoUnSelect',
+  event: 'geounselected'
+});
+
+/*
+* Licensed to the Apache Software Foundation (ASF) under one
+* or more contributor license agreements.  See the NOTICE file
+* distributed with this work for additional information
+* regarding copyright ownership.  The ASF licenses this file
+* to you under the Apache License, Version 2.0 (the
+* "License"); you may not use this file except in compliance
+* with the License.  You may obtain a copy of the License at
+*
+*   http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+* KIND, either express or implied.  See the License for the
+* specific language governing permissions and limitations
+* under the License.
+*/
 extendComponentModel({
   type: 'title',
   layoutMode: {
@@ -43269,9 +60718,9 @@ function makeBackground(rect, componentModel) {
 * specific language governing permissions and limitations
 * under the License.
 */
-var curry$2 = curry;
-var each$7 = each$1;
-var Group$2 = Group;
+var curry$3 = curry;
+var each$13 = each$1;
+var Group$3 = Group;
 var LegendView = extendComponentView({
   type: 'legend.plain',
   newlineDisabled: false,
@@ -43284,7 +60733,7 @@ var LegendView = extendComponentView({
      * @private
      * @type {module:zrender/container/Group}
      */
-    this.group.add(this._contentGroup = new Group$2());
+    this.group.add(this._contentGroup = new Group$3());
     /**
      * @private
      * @type {module:zrender/Element}
@@ -43296,7 +60745,7 @@ var LegendView = extendComponentView({
      * @type {module:zrender/container/Group}
      */
 
-    this.group.add(this._selectorGroup = new Group$2());
+    this.group.add(this._selectorGroup = new Group$3());
     /**
      * If first rendering, `contentGroup.position` is [0, 0], which
      * does not make sense and may cause unexepcted animation if adopted.
@@ -43387,11 +60836,11 @@ var LegendView = extendComponentView({
     ecModel.eachRawSeries(function (seriesModel) {
       !seriesModel.get('legendHoverLink') && excludeSeriesId.push(seriesModel.id);
     });
-    each$7(legendModel.getData(), function (itemModel, dataIndex) {
+    each$13(legendModel.getData(), function (itemModel, dataIndex) {
       var name = itemModel.get('name'); // Use empty string or \n as a newline string
 
       if (!this.newlineDisabled && (name === '' || name === '\n')) {
-        contentGroup.add(new Group$2({
+        contentGroup.add(new Group$3({
           newline: true
         }));
         return;
@@ -43428,7 +60877,7 @@ var LegendView = extendComponentView({
 
         var itemGroup = this._createItem(name, dataIndex, itemModel, legendModel, legendSymbolType, symbolType, itemAlign, color, borderColor, selectMode);
 
-        itemGroup.on('click', curry$2(dispatchSelectAction, name, null, api, excludeSeriesId)).on('mouseover', curry$2(dispatchHighlightAction, seriesModel.name, null, api, excludeSeriesId)).on('mouseout', curry$2(dispatchDownplayAction, seriesModel.name, null, api, excludeSeriesId));
+        itemGroup.on('click', curry$3(dispatchSelectAction, name, null, api, excludeSeriesId)).on('mouseover', curry$3(dispatchHighlightAction, seriesModel.name, null, api, excludeSeriesId)).on('mouseout', curry$3(dispatchDownplayAction, seriesModel.name, null, api, excludeSeriesId));
         legendDrawnMap.set(name, true);
       } else {
         // Legend to control data. In pie and funnel.
@@ -43453,9 +60902,9 @@ var LegendView = extendComponentView({
             var itemGroup = this._createItem(name, dataIndex, itemModel, legendModel, legendSymbolType, null, itemAlign, color, borderColor, selectMode); // FIXME: consider different series has items with the same name.
 
 
-            itemGroup.on('click', curry$2(dispatchSelectAction, null, name, api, excludeSeriesId)) // Should not specify the series name, consider legend controls
+            itemGroup.on('click', curry$3(dispatchSelectAction, null, name, api, excludeSeriesId)) // Should not specify the series name, consider legend controls
             // more than one pie series.
-            .on('mouseover', curry$2(dispatchHighlightAction, null, name, api, excludeSeriesId)).on('mouseout', curry$2(dispatchDownplayAction, null, name, api, excludeSeriesId));
+            .on('mouseover', curry$3(dispatchHighlightAction, null, name, api, excludeSeriesId)).on('mouseout', curry$3(dispatchDownplayAction, null, name, api, excludeSeriesId));
             legendDrawnMap.set(name, true);
           }
         }, this);
@@ -43468,7 +60917,7 @@ var LegendView = extendComponentView({
   },
   _createSelector: function (selector, legendModel, api, orient, selectorPosition) {
     var selectorGroup = this.getSelectorGroup();
-    each$7(selector, function (selectorItem) {
+    each$13(selector, function (selectorItem) {
       createSelectorButton(selectorItem);
     });
 
@@ -43505,7 +60954,7 @@ var LegendView = extendComponentView({
     var symbolKeepAspect = legendModel.get('symbolKeepAspect');
     var legendModelItemStyle = legendModel.getModel('itemStyle');
     var isSelected = legendModel.isSelected(name);
-    var itemGroup = new Group$2();
+    var itemGroup = new Group$3();
     var textStyleModel = itemModel.getModel('textStyle');
     var itemIcon = itemModel.get('icon');
     var tooltipModel = itemModel.getModel('tooltip');
@@ -43855,7 +61304,7 @@ function mergeAndNormalizeLayoutParams(legendModel, target, raw) {
 /**
  * Separate legend and scrollable legend to reduce package size.
  */
-var Group$3 = Group;
+var Group$4 = Group;
 var WH = ['width', 'height'];
 var XY = ['x', 'y'];
 var ScrollableLegendView = LegendView.extend({
@@ -43874,7 +61323,7 @@ var ScrollableLegendView = LegendView.extend({
      * @type {module:zrender/container/Group}
      */
 
-    this.group.add(this._containerGroup = new Group$3());
+    this.group.add(this._containerGroup = new Group$4());
 
     this._containerGroup.add(this.getContentGroup());
     /**
@@ -43883,7 +61332,7 @@ var ScrollableLegendView = LegendView.extend({
      */
 
 
-    this.group.add(this._controllerGroup = new Group$3());
+    this.group.add(this._controllerGroup = new Group$4());
     /**
      *
      * @private
@@ -44328,1623 +61777,6 @@ registerAction('legendScroll', 'legendscroll', function (payload, ecModel) {
 * specific language governing permissions and limitations
 * under the License.
 */
-/**
- * @param {Object} finder contains {seriesIndex, dataIndex, dataIndexInside}
- * @param {module:echarts/model/Global} ecModel
- * @return {Object} {point: [x, y], el: ...} point Will not be null.
- */
-
-var findPointFromSeries = function (finder, ecModel) {
-  var point = [];
-  var seriesIndex = finder.seriesIndex;
-  var seriesModel;
-
-  if (seriesIndex == null || !(seriesModel = ecModel.getSeriesByIndex(seriesIndex))) {
-    return {
-      point: []
-    };
-  }
-
-  var data = seriesModel.getData();
-  var dataIndex = queryDataIndex(data, finder);
-
-  if (dataIndex == null || dataIndex < 0 || isArray(dataIndex)) {
-    return {
-      point: []
-    };
-  }
-
-  var el = data.getItemGraphicEl(dataIndex);
-  var coordSys = seriesModel.coordinateSystem;
-
-  if (seriesModel.getTooltipPosition) {
-    point = seriesModel.getTooltipPosition(dataIndex) || [];
-  } else if (coordSys && coordSys.dataToPoint) {
-    point = coordSys.dataToPoint(data.getValues(map(coordSys.dimensions, function (dim) {
-      return data.mapDimension(dim);
-    }), dataIndex, true)) || [];
-  } else if (el) {
-    // Use graphic bounding rect
-    var rect = el.getBoundingRect().clone();
-    rect.applyTransform(el.transform);
-    point = [rect.x + rect.width / 2, rect.y + rect.height / 2];
-  }
-
-  return {
-    point: point,
-    el: el
-  };
-};
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var each$8 = each$1;
-var curry$3 = curry;
-var inner$7 = makeInner();
-/**
- * Basic logic: check all axis, if they do not demand show/highlight,
- * then hide/downplay them.
- *
- * @param {Object} coordSysAxesInfo
- * @param {Object} payload
- * @param {string} [payload.currTrigger] 'click' | 'mousemove' | 'leave'
- * @param {Array.<number>} [payload.x] x and y, which are mandatory, specify a point to
- *              trigger axisPointer and tooltip.
- * @param {Array.<number>} [payload.y] x and y, which are mandatory, specify a point to
- *              trigger axisPointer and tooltip.
- * @param {Object} [payload.seriesIndex] finder, optional, restrict target axes.
- * @param {Object} [payload.dataIndex] finder, restrict target axes.
- * @param {Object} [payload.axesInfo] finder, restrict target axes.
- *        [{
- *          axisDim: 'x'|'y'|'angle'|...,
- *          axisIndex: ...,
- *          value: ...
- *        }, ...]
- * @param {Function} [payload.dispatchAction]
- * @param {Object} [payload.tooltipOption]
- * @param {Object|Array.<number>|Function} [payload.position] Tooltip position,
- *        which can be specified in dispatchAction
- * @param {module:echarts/model/Global} ecModel
- * @param {module:echarts/ExtensionAPI} api
- * @return {Object} content of event obj for echarts.connect.
- */
-
-var axisTrigger = function (payload, ecModel, api) {
-  var currTrigger = payload.currTrigger;
-  var point = [payload.x, payload.y];
-  var finder = payload;
-  var dispatchAction = payload.dispatchAction || bind(api.dispatchAction, api);
-  var coordSysAxesInfo = ecModel.getComponent('axisPointer').coordSysAxesInfo; // Pending
-  // See #6121. But we are not able to reproduce it yet.
-
-  if (!coordSysAxesInfo) {
-    return;
-  }
-
-  if (illegalPoint(point)) {
-    // Used in the default behavior of `connection`: use the sample seriesIndex
-    // and dataIndex. And also used in the tooltipView trigger.
-    point = findPointFromSeries({
-      seriesIndex: finder.seriesIndex,
-      // Do not use dataIndexInside from other ec instance.
-      // FIXME: auto detect it?
-      dataIndex: finder.dataIndex
-    }, ecModel).point;
-  }
-
-  var isIllegalPoint = illegalPoint(point); // Axis and value can be specified when calling dispatchAction({type: 'updateAxisPointer'}).
-  // Notice: In this case, it is difficult to get the `point` (which is necessary to show
-  // tooltip, so if point is not given, we just use the point found by sample seriesIndex
-  // and dataIndex.
-
-  var inputAxesInfo = finder.axesInfo;
-  var axesInfo = coordSysAxesInfo.axesInfo;
-  var shouldHide = currTrigger === 'leave' || illegalPoint(point);
-  var outputFinder = {};
-  var showValueMap = {};
-  var dataByCoordSys = {
-    list: [],
-    map: {}
-  };
-  var updaters = {
-    showPointer: curry$3(showPointer, showValueMap),
-    showTooltip: curry$3(showTooltip, dataByCoordSys)
-  }; // Process for triggered axes.
-
-  each$8(coordSysAxesInfo.coordSysMap, function (coordSys, coordSysKey) {
-    // If a point given, it must be contained by the coordinate system.
-    var coordSysContainsPoint = isIllegalPoint || coordSys.containPoint(point);
-    each$8(coordSysAxesInfo.coordSysAxesInfo[coordSysKey], function (axisInfo, key) {
-      var axis = axisInfo.axis;
-      var inputAxisInfo = findInputAxisInfo(inputAxesInfo, axisInfo); // If no inputAxesInfo, no axis is restricted.
-
-      if (!shouldHide && coordSysContainsPoint && (!inputAxesInfo || inputAxisInfo)) {
-        var val = inputAxisInfo && inputAxisInfo.value;
-
-        if (val == null && !isIllegalPoint) {
-          val = axis.pointToData(point);
-        }
-
-        val != null && processOnAxis(axisInfo, val, updaters, false, outputFinder);
-      }
-    });
-  }); // Process for linked axes.
-
-  var linkTriggers = {};
-  each$8(axesInfo, function (tarAxisInfo, tarKey) {
-    var linkGroup = tarAxisInfo.linkGroup; // If axis has been triggered in the previous stage, it should not be triggered by link.
-
-    if (linkGroup && !showValueMap[tarKey]) {
-      each$8(linkGroup.axesInfo, function (srcAxisInfo, srcKey) {
-        var srcValItem = showValueMap[srcKey]; // If srcValItem exist, source axis is triggered, so link to target axis.
-
-        if (srcAxisInfo !== tarAxisInfo && srcValItem) {
-          var val = srcValItem.value;
-          linkGroup.mapper && (val = tarAxisInfo.axis.scale.parse(linkGroup.mapper(val, makeMapperParam(srcAxisInfo), makeMapperParam(tarAxisInfo))));
-          linkTriggers[tarAxisInfo.key] = val;
-        }
-      });
-    }
-  });
-  each$8(linkTriggers, function (val, tarKey) {
-    processOnAxis(axesInfo[tarKey], val, updaters, true, outputFinder);
-  });
-  updateModelActually(showValueMap, axesInfo, outputFinder);
-  dispatchTooltipActually(dataByCoordSys, point, payload, dispatchAction);
-  dispatchHighDownActually(axesInfo, dispatchAction, api);
-  return outputFinder;
-};
-
-function processOnAxis(axisInfo, newValue, updaters, dontSnap, outputFinder) {
-  var axis = axisInfo.axis;
-
-  if (axis.scale.isBlank() || !axis.containData(newValue)) {
-    return;
-  }
-
-  if (!axisInfo.involveSeries) {
-    updaters.showPointer(axisInfo, newValue);
-    return;
-  } // Heavy calculation. So put it after axis.containData checking.
-
-
-  var payloadInfo = buildPayloadsBySeries(newValue, axisInfo);
-  var payloadBatch = payloadInfo.payloadBatch;
-  var snapToValue = payloadInfo.snapToValue; // Fill content of event obj for echarts.connect.
-  // By default use the first involved series data as a sample to connect.
-
-  if (payloadBatch[0] && outputFinder.seriesIndex == null) {
-    extend(outputFinder, payloadBatch[0]);
-  } // If no linkSource input, this process is for collecting link
-  // target, where snap should not be accepted.
-
-
-  if (!dontSnap && axisInfo.snap) {
-    if (axis.containData(snapToValue) && snapToValue != null) {
-      newValue = snapToValue;
-    }
-  }
-
-  updaters.showPointer(axisInfo, newValue, payloadBatch, outputFinder); // Tooltip should always be snapToValue, otherwise there will be
-  // incorrect "axis value ~ series value" mapping displayed in tooltip.
-
-  updaters.showTooltip(axisInfo, payloadInfo, snapToValue);
-}
-
-function buildPayloadsBySeries(value, axisInfo) {
-  var axis = axisInfo.axis;
-  var dim = axis.dim;
-  var snapToValue = value;
-  var payloadBatch = [];
-  var minDist = Number.MAX_VALUE;
-  var minDiff = -1;
-  each$8(axisInfo.seriesModels, function (series, idx) {
-    var dataDim = series.getData().mapDimension(dim, true);
-    var seriesNestestValue;
-    var dataIndices;
-
-    if (series.getAxisTooltipData) {
-      var result = series.getAxisTooltipData(dataDim, value, axis);
-      dataIndices = result.dataIndices;
-      seriesNestestValue = result.nestestValue;
-    } else {
-      dataIndices = series.getData().indicesOfNearest(dataDim[0], value, // Add a threshold to avoid find the wrong dataIndex
-      // when data length is not same.
-      // false,
-      axis.type === 'category' ? 0.5 : null);
-
-      if (!dataIndices.length) {
-        return;
-      }
-
-      seriesNestestValue = series.getData().get(dataDim[0], dataIndices[0]);
-    }
-
-    if (seriesNestestValue == null || !isFinite(seriesNestestValue)) {
-      return;
-    }
-
-    var diff = value - seriesNestestValue;
-    var dist = Math.abs(diff); // Consider category case
-
-    if (dist <= minDist) {
-      if (dist < minDist || diff >= 0 && minDiff < 0) {
-        minDist = dist;
-        minDiff = diff;
-        snapToValue = seriesNestestValue;
-        payloadBatch.length = 0;
-      }
-
-      each$8(dataIndices, function (dataIndex) {
-        payloadBatch.push({
-          seriesIndex: series.seriesIndex,
-          dataIndexInside: dataIndex,
-          dataIndex: series.getData().getRawIndex(dataIndex)
-        });
-      });
-    }
-  });
-  return {
-    payloadBatch: payloadBatch,
-    snapToValue: snapToValue
-  };
-}
-
-function showPointer(showValueMap, axisInfo, value, payloadBatch) {
-  showValueMap[axisInfo.key] = {
-    value: value,
-    payloadBatch: payloadBatch
-  };
-}
-
-function showTooltip(dataByCoordSys, axisInfo, payloadInfo, value) {
-  var payloadBatch = payloadInfo.payloadBatch;
-  var axis = axisInfo.axis;
-  var axisModel = axis.model;
-  var axisPointerModel = axisInfo.axisPointerModel; // If no data, do not create anything in dataByCoordSys,
-  // whose length will be used to judge whether dispatch action.
-
-  if (!axisInfo.triggerTooltip || !payloadBatch.length) {
-    return;
-  }
-
-  var coordSysModel = axisInfo.coordSys.model;
-  var coordSysKey = makeKey(coordSysModel);
-  var coordSysItem = dataByCoordSys.map[coordSysKey];
-
-  if (!coordSysItem) {
-    coordSysItem = dataByCoordSys.map[coordSysKey] = {
-      coordSysId: coordSysModel.id,
-      coordSysIndex: coordSysModel.componentIndex,
-      coordSysType: coordSysModel.type,
-      coordSysMainType: coordSysModel.mainType,
-      dataByAxis: []
-    };
-    dataByCoordSys.list.push(coordSysItem);
-  }
-
-  coordSysItem.dataByAxis.push({
-    axisDim: axis.dim,
-    axisIndex: axisModel.componentIndex,
-    axisType: axisModel.type,
-    axisId: axisModel.id,
-    value: value,
-    // Caustion: viewHelper.getValueLabel is actually on "view stage", which
-    // depends that all models have been updated. So it should not be performed
-    // here. Considering axisPointerModel used here is volatile, which is hard
-    // to be retrieve in TooltipView, we prepare parameters here.
-    valueLabelOpt: {
-      precision: axisPointerModel.get('label.precision'),
-      formatter: axisPointerModel.get('label.formatter')
-    },
-    seriesDataIndices: payloadBatch.slice()
-  });
-}
-
-function updateModelActually(showValueMap, axesInfo, outputFinder) {
-  var outputAxesInfo = outputFinder.axesInfo = []; // Basic logic: If no 'show' required, 'hide' this axisPointer.
-
-  each$8(axesInfo, function (axisInfo, key) {
-    var option = axisInfo.axisPointerModel.option;
-    var valItem = showValueMap[key];
-
-    if (valItem) {
-      !axisInfo.useHandle && (option.status = 'show');
-      option.value = valItem.value; // For label formatter param and highlight.
-
-      option.seriesDataIndices = (valItem.payloadBatch || []).slice();
-    } // When always show (e.g., handle used), remain
-    // original value and status.
-    else {
-        // If hide, value still need to be set, consider
-        // click legend to toggle axis blank.
-        !axisInfo.useHandle && (option.status = 'hide');
-      } // If status is 'hide', should be no info in payload.
-
-
-    option.status === 'show' && outputAxesInfo.push({
-      axisDim: axisInfo.axis.dim,
-      axisIndex: axisInfo.axis.model.componentIndex,
-      value: option.value
-    });
-  });
-}
-
-function dispatchTooltipActually(dataByCoordSys, point, payload, dispatchAction) {
-  // Basic logic: If no showTip required, hideTip will be dispatched.
-  if (illegalPoint(point) || !dataByCoordSys.list.length) {
-    dispatchAction({
-      type: 'hideTip'
-    });
-    return;
-  } // In most case only one axis (or event one series is used). It is
-  // convinient to fetch payload.seriesIndex and payload.dataIndex
-  // dirtectly. So put the first seriesIndex and dataIndex of the first
-  // axis on the payload.
-
-
-  var sampleItem = ((dataByCoordSys.list[0].dataByAxis[0] || {}).seriesDataIndices || [])[0] || {};
-  dispatchAction({
-    type: 'showTip',
-    escapeConnect: true,
-    x: point[0],
-    y: point[1],
-    tooltipOption: payload.tooltipOption,
-    position: payload.position,
-    dataIndexInside: sampleItem.dataIndexInside,
-    dataIndex: sampleItem.dataIndex,
-    seriesIndex: sampleItem.seriesIndex,
-    dataByCoordSys: dataByCoordSys.list
-  });
-}
-
-function dispatchHighDownActually(axesInfo, dispatchAction, api) {
-  // FIXME
-  // highlight status modification shoule be a stage of main process?
-  // (Consider confilct (e.g., legend and axisPointer) and setOption)
-  var zr = api.getZr();
-  var highDownKey = 'axisPointerLastHighlights';
-  var lastHighlights = inner$7(zr)[highDownKey] || {};
-  var newHighlights = inner$7(zr)[highDownKey] = {}; // Update highlight/downplay status according to axisPointer model.
-  // Build hash map and remove duplicate incidentally.
-
-  each$8(axesInfo, function (axisInfo, key) {
-    var option = axisInfo.axisPointerModel.option;
-    option.status === 'show' && each$8(option.seriesDataIndices, function (batchItem) {
-      var key = batchItem.seriesIndex + ' | ' + batchItem.dataIndex;
-      newHighlights[key] = batchItem;
-    });
-  }); // Diff.
-
-  var toHighlight = [];
-  var toDownplay = [];
-  each$1(lastHighlights, function (batchItem, key) {
-    !newHighlights[key] && toDownplay.push(batchItem);
-  });
-  each$1(newHighlights, function (batchItem, key) {
-    !lastHighlights[key] && toHighlight.push(batchItem);
-  });
-  toDownplay.length && api.dispatchAction({
-    type: 'downplay',
-    escapeConnect: true,
-    batch: toDownplay
-  });
-  toHighlight.length && api.dispatchAction({
-    type: 'highlight',
-    escapeConnect: true,
-    batch: toHighlight
-  });
-}
-
-function findInputAxisInfo(inputAxesInfo, axisInfo) {
-  for (var i = 0; i < (inputAxesInfo || []).length; i++) {
-    var inputAxisInfo = inputAxesInfo[i];
-
-    if (axisInfo.axis.dim === inputAxisInfo.axisDim && axisInfo.axis.model.componentIndex === inputAxisInfo.axisIndex) {
-      return inputAxisInfo;
-    }
-  }
-}
-
-function makeMapperParam(axisInfo) {
-  var axisModel = axisInfo.axis.model;
-  var item = {};
-  var dim = item.axisDim = axisInfo.axis.dim;
-  item.axisIndex = item[dim + 'AxisIndex'] = axisModel.componentIndex;
-  item.axisName = item[dim + 'AxisName'] = axisModel.name;
-  item.axisId = item[dim + 'AxisId'] = axisModel.id;
-  return item;
-}
-
-function illegalPoint(point) {
-  return !point || point[0] == null || isNaN(point[0]) || point[1] == null || isNaN(point[1]);
-}
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var AxisPointerModel = extendComponentModel({
-  type: 'axisPointer',
-  coordSysAxesInfo: null,
-  defaultOption: {
-    // 'auto' means that show when triggered by tooltip or handle.
-    show: 'auto',
-    // 'click' | 'mousemove' | 'none'
-    triggerOn: null,
-    // set default in AxisPonterView.js
-    zlevel: 0,
-    z: 50,
-    type: 'line',
-    // 'line' 'shadow' 'cross' 'none'.
-    // axispointer triggered by tootip determine snap automatically,
-    // see `modelHelper`.
-    snap: false,
-    triggerTooltip: true,
-    value: null,
-    status: null,
-    // Init value depends on whether handle is used.
-    // [group0, group1, ...]
-    // Each group can be: {
-    //      mapper: function () {},
-    //      singleTooltip: 'multiple',  // 'multiple' or 'single'
-    //      xAxisId: ...,
-    //      yAxisName: ...,
-    //      angleAxisIndex: ...
-    // }
-    // mapper: can be ignored.
-    //      input: {axisInfo, value}
-    //      output: {axisInfo, value}
-    link: [],
-    // Do not set 'auto' here, otherwise global animation: false
-    // will not effect at this axispointer.
-    animation: null,
-    animationDurationUpdate: 200,
-    lineStyle: {
-      color: '#aaa',
-      width: 1,
-      type: 'solid'
-    },
-    shadowStyle: {
-      color: 'rgba(150,150,150,0.3)'
-    },
-    label: {
-      show: true,
-      formatter: null,
-      // string | Function
-      precision: 'auto',
-      // Or a number like 0, 1, 2 ...
-      margin: 3,
-      color: '#fff',
-      padding: [5, 7, 5, 7],
-      backgroundColor: 'auto',
-      // default: axis line color
-      borderColor: null,
-      borderWidth: 0,
-      shadowBlur: 3,
-      shadowColor: '#aaa' // Considering applicability, common style should
-      // better not have shadowOffset.
-      // shadowOffsetX: 0,
-      // shadowOffsetY: 2
-
-    },
-    handle: {
-      show: false,
-
-      /* eslint-disable */
-      icon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z',
-      // jshint ignore:line
-
-      /* eslint-enable */
-      size: 45,
-      // handle margin is from symbol center to axis, which is stable when circular move.
-      margin: 50,
-      // color: '#1b8bbd'
-      // color: '#2f4554'
-      color: '#333',
-      shadowBlur: 3,
-      shadowColor: '#aaa',
-      shadowOffsetX: 0,
-      shadowOffsetY: 2,
-      // For mobile performance
-      throttle: 40
-    }
-  }
-});
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var inner$8 = makeInner();
-var each$9 = each$1;
-/**
- * @param {string} key
- * @param {module:echarts/ExtensionAPI} api
- * @param {Function} handler
- *      param: {string} currTrigger
- *      param: {Array.<number>} point
- */
-
-function register(key, api, handler) {
-  if (env$1.node) {
-    return;
-  }
-
-  var zr = api.getZr();
-  inner$8(zr).records || (inner$8(zr).records = {});
-  initGlobalListeners(zr, api);
-  var record = inner$8(zr).records[key] || (inner$8(zr).records[key] = {});
-  record.handler = handler;
-}
-
-function initGlobalListeners(zr, api) {
-  if (inner$8(zr).initialized) {
-    return;
-  }
-
-  inner$8(zr).initialized = true;
-  useHandler('click', curry(doEnter, 'click'));
-  useHandler('mousemove', curry(doEnter, 'mousemove')); // useHandler('mouseout', onLeave);
-
-  useHandler('globalout', onLeave);
-
-  function useHandler(eventType, cb) {
-    zr.on(eventType, function (e) {
-      var dis = makeDispatchAction(api);
-      each$9(inner$8(zr).records, function (record) {
-        record && cb(record, e, dis.dispatchAction);
-      });
-      dispatchTooltipFinally(dis.pendings, api);
-    });
-  }
-}
-
-function dispatchTooltipFinally(pendings, api) {
-  var showLen = pendings.showTip.length;
-  var hideLen = pendings.hideTip.length;
-  var actuallyPayload;
-
-  if (showLen) {
-    actuallyPayload = pendings.showTip[showLen - 1];
-  } else if (hideLen) {
-    actuallyPayload = pendings.hideTip[hideLen - 1];
-  }
-
-  if (actuallyPayload) {
-    actuallyPayload.dispatchAction = null;
-    api.dispatchAction(actuallyPayload);
-  }
-}
-
-function onLeave(record, e, dispatchAction) {
-  record.handler('leave', null, dispatchAction);
-}
-
-function doEnter(currTrigger, record, e, dispatchAction) {
-  record.handler(currTrigger, e, dispatchAction);
-}
-
-function makeDispatchAction(api) {
-  var pendings = {
-    showTip: [],
-    hideTip: []
-  }; // FIXME
-  // better approach?
-  // 'showTip' and 'hideTip' can be triggered by axisPointer and tooltip,
-  // which may be conflict, (axisPointer call showTip but tooltip call hideTip);
-  // So we have to add "final stage" to merge those dispatched actions.
-
-  var dispatchAction = function (payload) {
-    var pendingList = pendings[payload.type];
-
-    if (pendingList) {
-      pendingList.push(payload);
-    } else {
-      payload.dispatchAction = dispatchAction;
-      api.dispatchAction(payload);
-    }
-  };
-
-  return {
-    dispatchAction: dispatchAction,
-    pendings: pendings
-  };
-}
-/**
- * @param {string} key
- * @param {module:echarts/ExtensionAPI} api
- */
-
-
-function unregister(key, api) {
-  if (env$1.node) {
-    return;
-  }
-
-  var zr = api.getZr();
-  var record = (inner$8(zr).records || {})[key];
-
-  if (record) {
-    inner$8(zr).records[key] = null;
-  }
-}
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var AxisPointerView = extendComponentView({
-  type: 'axisPointer',
-  render: function (globalAxisPointerModel, ecModel, api) {
-    var globalTooltipModel = ecModel.getComponent('tooltip');
-    var triggerOn = globalAxisPointerModel.get('triggerOn') || globalTooltipModel && globalTooltipModel.get('triggerOn') || 'mousemove|click'; // Register global listener in AxisPointerView to enable
-    // AxisPointerView to be independent to Tooltip.
-
-    register('axisPointer', api, function (currTrigger, e, dispatchAction) {
-      // If 'none', it is not controlled by mouse totally.
-      if (triggerOn !== 'none' && (currTrigger === 'leave' || triggerOn.indexOf(currTrigger) >= 0)) {
-        dispatchAction({
-          type: 'updateAxisPointer',
-          currTrigger: currTrigger,
-          x: e && e.offsetX,
-          y: e && e.offsetY
-        });
-      }
-    });
-  },
-
-  /**
-   * @override
-   */
-  remove: function (ecModel, api) {
-    unregister(api.getZr(), 'axisPointer');
-    AxisPointerView.superApply(this._model, 'remove', arguments);
-  },
-
-  /**
-   * @override
-   */
-  dispose: function (ecModel, api) {
-    unregister('axisPointer', api);
-    AxisPointerView.superApply(this._model, 'dispose', arguments);
-  }
-});
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var inner$9 = makeInner();
-var clone$4 = clone;
-var bind$1 = bind;
-/**
- * Base axis pointer class in 2D.
- * Implemenents {module:echarts/component/axis/IAxisPointer}.
- */
-
-function BaseAxisPointer() {}
-
-BaseAxisPointer.prototype = {
-  /**
-   * @private
-   */
-  _group: null,
-
-  /**
-   * @private
-   */
-  _lastGraphicKey: null,
-
-  /**
-   * @private
-   */
-  _handle: null,
-
-  /**
-   * @private
-   */
-  _dragging: false,
-
-  /**
-   * @private
-   */
-  _lastValue: null,
-
-  /**
-   * @private
-   */
-  _lastStatus: null,
-
-  /**
-   * @private
-   */
-  _payloadInfo: null,
-
-  /**
-   * In px, arbitrary value. Do not set too small,
-   * no animation is ok for most cases.
-   * @protected
-   */
-  animationThreshold: 15,
-
-  /**
-   * @implement
-   */
-  render: function (axisModel, axisPointerModel, api, forceRender) {
-    var value = axisPointerModel.get('value');
-    var status = axisPointerModel.get('status'); // Bind them to `this`, not in closure, otherwise they will not
-    // be replaced when user calling setOption in not merge mode.
-
-    this._axisModel = axisModel;
-    this._axisPointerModel = axisPointerModel;
-    this._api = api; // Optimize: `render` will be called repeatly during mouse move.
-    // So it is power consuming if performing `render` each time,
-    // especially on mobile device.
-
-    if (!forceRender && this._lastValue === value && this._lastStatus === status) {
-      return;
-    }
-
-    this._lastValue = value;
-    this._lastStatus = status;
-    var group = this._group;
-    var handle = this._handle;
-
-    if (!status || status === 'hide') {
-      // Do not clear here, for animation better.
-      group && group.hide();
-      handle && handle.hide();
-      return;
-    }
-
-    group && group.show();
-    handle && handle.show(); // Otherwise status is 'show'
-
-    var elOption = {};
-    this.makeElOption(elOption, value, axisModel, axisPointerModel, api); // Enable change axis pointer type.
-
-    var graphicKey = elOption.graphicKey;
-
-    if (graphicKey !== this._lastGraphicKey) {
-      this.clear(api);
-    }
-
-    this._lastGraphicKey = graphicKey;
-    var moveAnimation = this._moveAnimation = this.determineAnimation(axisModel, axisPointerModel);
-
-    if (!group) {
-      group = this._group = new Group();
-      this.createPointerEl(group, elOption, axisModel, axisPointerModel);
-      this.createLabelEl(group, elOption, axisModel, axisPointerModel);
-      api.getZr().add(group);
-    } else {
-      var doUpdateProps = curry(updateProps$1, axisPointerModel, moveAnimation);
-      this.updatePointerEl(group, elOption, doUpdateProps, axisPointerModel);
-      this.updateLabelEl(group, elOption, doUpdateProps, axisPointerModel);
-    }
-
-    updateMandatoryProps(group, axisPointerModel, true);
-
-    this._renderHandle(value);
-  },
-
-  /**
-   * @implement
-   */
-  remove: function (api) {
-    this.clear(api);
-  },
-
-  /**
-   * @implement
-   */
-  dispose: function (api) {
-    this.clear(api);
-  },
-
-  /**
-   * @protected
-   */
-  determineAnimation: function (axisModel, axisPointerModel) {
-    var animation = axisPointerModel.get('animation');
-    var axis = axisModel.axis;
-    var isCategoryAxis = axis.type === 'category';
-    var useSnap = axisPointerModel.get('snap'); // Value axis without snap always do not snap.
-
-    if (!useSnap && !isCategoryAxis) {
-      return false;
-    }
-
-    if (animation === 'auto' || animation == null) {
-      var animationThreshold = this.animationThreshold;
-
-      if (isCategoryAxis && axis.getBandWidth() > animationThreshold) {
-        return true;
-      } // It is important to auto animation when snap used. Consider if there is
-      // a dataZoom, animation will be disabled when too many points exist, while
-      // it will be enabled for better visual effect when little points exist.
-
-
-      if (useSnap) {
-        var seriesDataCount = getAxisInfo(axisModel).seriesDataCount;
-        var axisExtent = axis.getExtent(); // Approximate band width
-
-        return Math.abs(axisExtent[0] - axisExtent[1]) / seriesDataCount > animationThreshold;
-      }
-
-      return false;
-    }
-
-    return animation === true;
-  },
-
-  /**
-   * add {pointer, label, graphicKey} to elOption
-   * @protected
-   */
-  makeElOption: function (elOption, value, axisModel, axisPointerModel, api) {// Shoule be implemenented by sub-class.
-  },
-
-  /**
-   * @protected
-   */
-  createPointerEl: function (group, elOption, axisModel, axisPointerModel) {
-    var pointerOption = elOption.pointer;
-
-    if (pointerOption) {
-      var pointerEl = inner$9(group).pointerEl = new graphic[pointerOption.type](clone$4(elOption.pointer));
-      group.add(pointerEl);
-    }
-  },
-
-  /**
-   * @protected
-   */
-  createLabelEl: function (group, elOption, axisModel, axisPointerModel) {
-    if (elOption.label) {
-      var labelEl = inner$9(group).labelEl = new Rect(clone$4(elOption.label));
-      group.add(labelEl);
-      updateLabelShowHide(labelEl, axisPointerModel);
-    }
-  },
-
-  /**
-   * @protected
-   */
-  updatePointerEl: function (group, elOption, updateProps$$1) {
-    var pointerEl = inner$9(group).pointerEl;
-
-    if (pointerEl && elOption.pointer) {
-      pointerEl.setStyle(elOption.pointer.style);
-      updateProps$$1(pointerEl, {
-        shape: elOption.pointer.shape
-      });
-    }
-  },
-
-  /**
-   * @protected
-   */
-  updateLabelEl: function (group, elOption, updateProps$$1, axisPointerModel) {
-    var labelEl = inner$9(group).labelEl;
-
-    if (labelEl) {
-      labelEl.setStyle(elOption.label.style);
-      updateProps$$1(labelEl, {
-        // Consider text length change in vertical axis, animation should
-        // be used on shape, otherwise the effect will be weird.
-        shape: elOption.label.shape,
-        position: elOption.label.position
-      });
-      updateLabelShowHide(labelEl, axisPointerModel);
-    }
-  },
-
-  /**
-   * @private
-   */
-  _renderHandle: function (value) {
-    if (this._dragging || !this.updateHandleTransform) {
-      return;
-    }
-
-    var axisPointerModel = this._axisPointerModel;
-
-    var zr = this._api.getZr();
-
-    var handle = this._handle;
-    var handleModel = axisPointerModel.getModel('handle');
-    var status = axisPointerModel.get('status');
-
-    if (!handleModel.get('show') || !status || status === 'hide') {
-      handle && zr.remove(handle);
-      this._handle = null;
-      return;
-    }
-
-    var isInit;
-
-    if (!this._handle) {
-      isInit = true;
-      handle = this._handle = createIcon(handleModel.get('icon'), {
-        cursor: 'move',
-        draggable: true,
-        onmousemove: function (e) {
-          // Fot mobile devicem, prevent screen slider on the button.
-          stop(e.event);
-        },
-        onmousedown: bind$1(this._onHandleDragMove, this, 0, 0),
-        drift: bind$1(this._onHandleDragMove, this),
-        ondragend: bind$1(this._onHandleDragEnd, this)
-      });
-      zr.add(handle);
-    }
-
-    updateMandatoryProps(handle, axisPointerModel, false); // update style
-
-    var includeStyles = ['color', 'borderColor', 'borderWidth', 'opacity', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY'];
-    handle.setStyle(handleModel.getItemStyle(null, includeStyles)); // update position
-
-    var handleSize = handleModel.get('size');
-
-    if (!isArray(handleSize)) {
-      handleSize = [handleSize, handleSize];
-    }
-
-    handle.attr('scale', [handleSize[0] / 2, handleSize[1] / 2]);
-    createOrUpdate(this, '_doDispatchAxisPointer', handleModel.get('throttle') || 0, 'fixRate');
-
-    this._moveHandleToValue(value, isInit);
-  },
-
-  /**
-   * @private
-   */
-  _moveHandleToValue: function (value, isInit) {
-    updateProps$1(this._axisPointerModel, !isInit && this._moveAnimation, this._handle, getHandleTransProps(this.getHandleTransform(value, this._axisModel, this._axisPointerModel)));
-  },
-
-  /**
-   * @private
-   */
-  _onHandleDragMove: function (dx, dy) {
-    var handle = this._handle;
-
-    if (!handle) {
-      return;
-    }
-
-    this._dragging = true; // Persistent for throttle.
-
-    var trans = this.updateHandleTransform(getHandleTransProps(handle), [dx, dy], this._axisModel, this._axisPointerModel);
-    this._payloadInfo = trans;
-    handle.stopAnimation();
-    handle.attr(getHandleTransProps(trans));
-    inner$9(handle).lastProp = null;
-
-    this._doDispatchAxisPointer();
-  },
-
-  /**
-   * Throttled method.
-   * @private
-   */
-  _doDispatchAxisPointer: function () {
-    var handle = this._handle;
-
-    if (!handle) {
-      return;
-    }
-
-    var payloadInfo = this._payloadInfo;
-    var axisModel = this._axisModel;
-
-    this._api.dispatchAction({
-      type: 'updateAxisPointer',
-      x: payloadInfo.cursorPoint[0],
-      y: payloadInfo.cursorPoint[1],
-      tooltipOption: payloadInfo.tooltipOption,
-      axesInfo: [{
-        axisDim: axisModel.axis.dim,
-        axisIndex: axisModel.componentIndex
-      }]
-    });
-  },
-
-  /**
-   * @private
-   */
-  _onHandleDragEnd: function (moveAnimation) {
-    this._dragging = false;
-    var handle = this._handle;
-
-    if (!handle) {
-      return;
-    }
-
-    var value = this._axisPointerModel.get('value'); // Consider snap or categroy axis, handle may be not consistent with
-    // axisPointer. So move handle to align the exact value position when
-    // drag ended.
-
-
-    this._moveHandleToValue(value); // For the effect: tooltip will be shown when finger holding on handle
-    // button, and will be hidden after finger left handle button.
-
-
-    this._api.dispatchAction({
-      type: 'hideTip'
-    });
-  },
-
-  /**
-   * Should be implemenented by sub-class if support `handle`.
-   * @protected
-   * @param {number} value
-   * @param {module:echarts/model/Model} axisModel
-   * @param {module:echarts/model/Model} axisPointerModel
-   * @return {Object} {position: [x, y], rotation: 0}
-   */
-  getHandleTransform: null,
-
-  /**
-   * * Should be implemenented by sub-class if support `handle`.
-   * @protected
-   * @param {Object} transform {position, rotation}
-   * @param {Array.<number>} delta [dx, dy]
-   * @param {module:echarts/model/Model} axisModel
-   * @param {module:echarts/model/Model} axisPointerModel
-   * @return {Object} {position: [x, y], rotation: 0, cursorPoint: [x, y]}
-   */
-  updateHandleTransform: null,
-
-  /**
-   * @private
-   */
-  clear: function (api) {
-    this._lastValue = null;
-    this._lastStatus = null;
-    var zr = api.getZr();
-    var group = this._group;
-    var handle = this._handle;
-
-    if (zr && group) {
-      this._lastGraphicKey = null;
-      group && zr.remove(group);
-      handle && zr.remove(handle);
-      this._group = null;
-      this._handle = null;
-      this._payloadInfo = null;
-    }
-  },
-
-  /**
-   * @protected
-   */
-  doClear: function () {// Implemented by sub-class if necessary.
-  },
-
-  /**
-   * @protected
-   * @param {Array.<number>} xy
-   * @param {Array.<number>} wh
-   * @param {number} [xDimIndex=0] or 1
-   */
-  buildLabel: function (xy, wh, xDimIndex) {
-    xDimIndex = xDimIndex || 0;
-    return {
-      x: xy[xDimIndex],
-      y: xy[1 - xDimIndex],
-      width: wh[xDimIndex],
-      height: wh[1 - xDimIndex]
-    };
-  }
-};
-BaseAxisPointer.prototype.constructor = BaseAxisPointer;
-
-function updateProps$1(animationModel, moveAnimation, el, props) {
-  // Animation optimize.
-  if (!propsEqual(inner$9(el).lastProp, props)) {
-    inner$9(el).lastProp = props;
-    moveAnimation ? updateProps(el, props, animationModel) : (el.stopAnimation(), el.attr(props));
-  }
-}
-
-function propsEqual(lastProps, newProps) {
-  if (isObject$1(lastProps) && isObject$1(newProps)) {
-    var equals = true;
-    each$1(newProps, function (item, key) {
-      equals = equals && propsEqual(lastProps[key], item);
-    });
-    return !!equals;
-  } else {
-    return lastProps === newProps;
-  }
-}
-
-function updateLabelShowHide(labelEl, axisPointerModel) {
-  labelEl[axisPointerModel.get('label.show') ? 'show' : 'hide']();
-}
-
-function getHandleTransProps(trans) {
-  return {
-    position: trans.position.slice(),
-    rotation: trans.rotation || 0
-  };
-}
-
-function updateMandatoryProps(group, axisPointerModel, silent) {
-  var z = axisPointerModel.get('z');
-  var zlevel = axisPointerModel.get('zlevel');
-  group && group.traverse(function (el) {
-    if (el.type !== 'group') {
-      z != null && (el.z = z);
-      zlevel != null && (el.zlevel = zlevel);
-      el.silent = silent;
-    }
-  });
-}
-
-enableClassExtend(BaseAxisPointer);
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-/**
- * @param {module:echarts/model/Model} axisPointerModel
- */
-
-function buildElStyle(axisPointerModel) {
-  var axisPointerType = axisPointerModel.get('type');
-  var styleModel = axisPointerModel.getModel(axisPointerType + 'Style');
-  var style;
-
-  if (axisPointerType === 'line') {
-    style = styleModel.getLineStyle();
-    style.fill = null;
-  } else if (axisPointerType === 'shadow') {
-    style = styleModel.getAreaStyle();
-    style.stroke = null;
-  }
-
-  return style;
-}
-/**
- * @param {Function} labelPos {align, verticalAlign, position}
- */
-
-function buildLabelElOption(elOption, axisModel, axisPointerModel, api, labelPos) {
-  var value = axisPointerModel.get('value');
-  var text = getValueLabel(value, axisModel.axis, axisModel.ecModel, axisPointerModel.get('seriesDataIndices'), {
-    precision: axisPointerModel.get('label.precision'),
-    formatter: axisPointerModel.get('label.formatter')
-  });
-  var labelModel = axisPointerModel.getModel('label');
-  var paddings = normalizeCssArray$1(labelModel.get('padding') || 0);
-  var font = labelModel.getFont();
-  var textRect = getBoundingRect(text, font);
-  var position = labelPos.position;
-  var width = textRect.width + paddings[1] + paddings[3];
-  var height = textRect.height + paddings[0] + paddings[2]; // Adjust by align.
-
-  var align = labelPos.align;
-  align === 'right' && (position[0] -= width);
-  align === 'center' && (position[0] -= width / 2);
-  var verticalAlign = labelPos.verticalAlign;
-  verticalAlign === 'bottom' && (position[1] -= height);
-  verticalAlign === 'middle' && (position[1] -= height / 2); // Not overflow ec container
-
-  confineInContainer(position, width, height, api);
-  var bgColor = labelModel.get('backgroundColor');
-
-  if (!bgColor || bgColor === 'auto') {
-    bgColor = axisModel.get('axisLine.lineStyle.color');
-  }
-
-  elOption.label = {
-    shape: {
-      x: 0,
-      y: 0,
-      width: width,
-      height: height,
-      r: labelModel.get('borderRadius')
-    },
-    position: position.slice(),
-    // TODO: rich
-    style: {
-      text: text,
-      textFont: font,
-      textFill: labelModel.getTextColor(),
-      textPosition: 'inside',
-      textPadding: paddings,
-      fill: bgColor,
-      stroke: labelModel.get('borderColor') || 'transparent',
-      lineWidth: labelModel.get('borderWidth') || 0,
-      shadowBlur: labelModel.get('shadowBlur'),
-      shadowColor: labelModel.get('shadowColor'),
-      shadowOffsetX: labelModel.get('shadowOffsetX'),
-      shadowOffsetY: labelModel.get('shadowOffsetY')
-    },
-    // Lable should be over axisPointer.
-    z2: 10
-  };
-} // Do not overflow ec container
-
-function confineInContainer(position, width, height, api) {
-  var viewWidth = api.getWidth();
-  var viewHeight = api.getHeight();
-  position[0] = Math.min(position[0] + width, viewWidth) - width;
-  position[1] = Math.min(position[1] + height, viewHeight) - height;
-  position[0] = Math.max(position[0], 0);
-  position[1] = Math.max(position[1], 0);
-}
-/**
- * @param {number} value
- * @param {module:echarts/coord/Axis} axis
- * @param {module:echarts/model/Global} ecModel
- * @param {Object} opt
- * @param {Array.<Object>} seriesDataIndices
- * @param {number|string} opt.precision 'auto' or a number
- * @param {string|Function} opt.formatter label formatter
- */
-
-
-function getValueLabel(value, axis, ecModel, seriesDataIndices, opt) {
-  value = axis.scale.parse(value);
-  var text = axis.scale.getLabel( // If `precision` is set, width can be fixed (like '12.00500'), which
-  // helps to debounce when when moving label.
-  value, {
-    precision: opt.precision
-  });
-  var formatter = opt.formatter;
-
-  if (formatter) {
-    var params = {
-      value: getAxisRawValue(axis, value),
-      axisDimension: axis.dim,
-      axisIndex: axis.index,
-      seriesData: []
-    };
-    each$1(seriesDataIndices, function (idxItem) {
-      var series = ecModel.getSeriesByIndex(idxItem.seriesIndex);
-      var dataIndex = idxItem.dataIndexInside;
-      var dataParams = series && series.getDataParams(dataIndex);
-      dataParams && params.seriesData.push(dataParams);
-    });
-
-    if (isString(formatter)) {
-      text = formatter.replace('{value}', text);
-    } else if (isFunction$1(formatter)) {
-      text = formatter(params);
-    }
-  }
-
-  return text;
-}
-/**
- * @param {module:echarts/coord/Axis} axis
- * @param {number} value
- * @param {Object} layoutInfo {
- *  rotation, position, labelOffset, labelDirection, labelMargin
- * }
- */
-
-function getTransformedPosition(axis, value, layoutInfo) {
-  var transform = create$1();
-  rotate(transform, transform, layoutInfo.rotation);
-  translate(transform, transform, layoutInfo.position);
-  return applyTransform$1([axis.dataToCoord(value), (layoutInfo.labelOffset || 0) + (layoutInfo.labelDirection || 1) * (layoutInfo.labelMargin || 0)], transform);
-}
-function buildCartesianSingleLabelElOption(value, elOption, layoutInfo, axisModel, axisPointerModel, api) {
-  var textLayout = AxisBuilder.innerTextLayout(layoutInfo.rotation, 0, layoutInfo.labelDirection);
-  layoutInfo.labelMargin = axisPointerModel.get('label.margin');
-  buildLabelElOption(elOption, axisModel, axisPointerModel, api, {
-    position: getTransformedPosition(axisModel.axis, value, layoutInfo),
-    align: textLayout.textAlign,
-    verticalAlign: textLayout.textVerticalAlign
-  });
-}
-/**
- * @param {Array.<number>} p1
- * @param {Array.<number>} p2
- * @param {number} [xDimIndex=0] or 1
- */
-
-function makeLineShape(p1, p2, xDimIndex) {
-  xDimIndex = xDimIndex || 0;
-  return {
-    x1: p1[xDimIndex],
-    y1: p1[1 - xDimIndex],
-    x2: p2[xDimIndex],
-    y2: p2[1 - xDimIndex]
-  };
-}
-/**
- * @param {Array.<number>} xy
- * @param {Array.<number>} wh
- * @param {number} [xDimIndex=0] or 1
- */
-
-function makeRectShape(xy, wh, xDimIndex) {
-  xDimIndex = xDimIndex || 0;
-  return {
-    x: xy[xDimIndex],
-    y: xy[1 - xDimIndex],
-    width: wh[xDimIndex],
-    height: wh[1 - xDimIndex]
-  };
-}
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-var CartesianAxisPointer = BaseAxisPointer.extend({
-  /**
-   * @override
-   */
-  makeElOption: function (elOption, value, axisModel, axisPointerModel, api) {
-    var axis = axisModel.axis;
-    var grid = axis.grid;
-    var axisPointerType = axisPointerModel.get('type');
-    var otherExtent = getCartesian(grid, axis).getOtherAxis(axis).getGlobalExtent();
-    var pixelValue = axis.toGlobalCoord(axis.dataToCoord(value, true));
-
-    if (axisPointerType && axisPointerType !== 'none') {
-      var elStyle = buildElStyle(axisPointerModel);
-      var pointerOption = pointerShapeBuilder[axisPointerType](axis, pixelValue, otherExtent);
-      pointerOption.style = elStyle;
-      elOption.graphicKey = pointerOption.type;
-      elOption.pointer = pointerOption;
-    }
-
-    var layoutInfo = layout$1(grid.model, axisModel);
-    buildCartesianSingleLabelElOption(value, elOption, layoutInfo, axisModel, axisPointerModel, api);
-  },
-
-  /**
-   * @override
-   */
-  getHandleTransform: function (value, axisModel, axisPointerModel) {
-    var layoutInfo = layout$1(axisModel.axis.grid.model, axisModel, {
-      labelInside: false
-    });
-    layoutInfo.labelMargin = axisPointerModel.get('handle.margin');
-    return {
-      position: getTransformedPosition(axisModel.axis, value, layoutInfo),
-      rotation: layoutInfo.rotation + (layoutInfo.labelDirection < 0 ? Math.PI : 0)
-    };
-  },
-
-  /**
-   * @override
-   */
-  updateHandleTransform: function (transform, delta, axisModel, axisPointerModel) {
-    var axis = axisModel.axis;
-    var grid = axis.grid;
-    var axisExtent = axis.getGlobalExtent(true);
-    var otherExtent = getCartesian(grid, axis).getOtherAxis(axis).getGlobalExtent();
-    var dimIndex = axis.dim === 'x' ? 0 : 1;
-    var currPosition = transform.position;
-    currPosition[dimIndex] += delta[dimIndex];
-    currPosition[dimIndex] = Math.min(axisExtent[1], currPosition[dimIndex]);
-    currPosition[dimIndex] = Math.max(axisExtent[0], currPosition[dimIndex]);
-    var cursorOtherValue = (otherExtent[1] + otherExtent[0]) / 2;
-    var cursorPoint = [cursorOtherValue, cursorOtherValue];
-    cursorPoint[dimIndex] = currPosition[dimIndex]; // Make tooltip do not overlap axisPointer and in the middle of the grid.
-
-    var tooltipOptions = [{
-      verticalAlign: 'middle'
-    }, {
-      align: 'center'
-    }];
-    return {
-      position: currPosition,
-      rotation: transform.rotation,
-      cursorPoint: cursorPoint,
-      tooltipOption: tooltipOptions[dimIndex]
-    };
-  }
-});
-
-function getCartesian(grid, axis) {
-  var opt = {};
-  opt[axis.dim + 'AxisIndex'] = axis.index;
-  return grid.getCartesian(opt);
-}
-
-var pointerShapeBuilder = {
-  line: function (axis, pixelValue, otherExtent) {
-    var targetShape = makeLineShape([pixelValue, otherExtent[0]], [pixelValue, otherExtent[1]], getAxisDimIndex(axis));
-    return {
-      type: 'Line',
-      subPixelOptimize: true,
-      shape: targetShape
-    };
-  },
-  shadow: function (axis, pixelValue, otherExtent) {
-    var bandWidth = Math.max(1, axis.getBandWidth());
-    var span = otherExtent[1] - otherExtent[0];
-    return {
-      type: 'Rect',
-      shape: makeRectShape([pixelValue - bandWidth / 2, otherExtent[0]], [bandWidth, span], getAxisDimIndex(axis))
-    };
-  }
-};
-
-function getAxisDimIndex(axis) {
-  return axis.dim === 'x' ? 0 : 1;
-}
-
-AxisView.registerAxisPointerClass('CartesianAxisPointer', CartesianAxisPointer);
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-// echarts.simple.js and online build tooltip, which only require gridSimple,
-// CartesianAxisPointer should be able to required somewhere.
-
-registerPreprocessor(function (option) {
-  // Always has a global axisPointerModel for default setting.
-  if (option) {
-    (!option.axisPointer || option.axisPointer.length === 0) && (option.axisPointer = {});
-    var link = option.axisPointer.link; // Normalize to array to avoid object mergin. But if link
-    // is not set, remain null/undefined, otherwise it will
-    // override existent link setting.
-
-    if (link && !isArray(link)) {
-      option.axisPointer.link = [link];
-    }
-  }
-}); // This process should proformed after coordinate systems created
-// and series data processed. So put it on statistic processing stage.
-
-registerProcessor(PRIORITY.PROCESSOR.STATISTIC, function (ecModel, api) {
-  // Build axisPointerModel, mergin tooltip.axisPointer model for each axis.
-  // allAxesInfo should be updated when setOption performed.
-  ecModel.getComponent('axisPointer').coordSysAxesInfo = collect(ecModel, api);
-}); // Broadcast to all views.
-
-registerAction({
-  type: 'updateAxisPointer',
-  event: 'updateAxisPointer',
-  update: ':updateAxisPointer'
-}, axisTrigger);
-
-/*
-* Licensed to the Apache Software Foundation (ASF) under one
-* or more contributor license agreements.  See the NOTICE file
-* distributed with this work for additional information
-* regarding copyright ownership.  The ASF licenses this file
-* to you under the Apache License, Version 2.0 (the
-* "License"); you may not use this file except in compliance
-* with the License.  You may obtain a copy of the License at
-*
-*   http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
 extendComponentModel({
   type: 'tooltip',
   dependencies: ['axisPointer'],
@@ -46043,7 +61875,7 @@ extendComponentModel({
 * specific language governing permissions and limitations
 * under the License.
 */
-var each$11 = each$1;
+var each$15 = each$1;
 var toCamelCase$1 = toCamelCase;
 var vendors = ['', '-webkit-', '-moz-', '-o-'];
 var gCssText = 'position:absolute;display:block;border-style:solid;white-space:nowrap;z-index:9999999;';
@@ -46085,7 +61917,7 @@ function assembleFont(textStyleModel) {
   var shadowOffsetX = textStyleModel.get('textShadowOffsetX') || 0;
   var shadowOffsetY = textStyleModel.get('textShadowOffsetY') || 0;
   shadowBlur && cssText.push('text-shadow:' + shadowOffsetX + 'px ' + shadowOffsetY + 'px ' + shadowBlur + 'px ' + shadowColor);
-  each$11(['decoration', 'align'], function (name) {
+  each$15(['decoration', 'align'], function (name) {
     var val = textStyleModel.get(name);
     val && cssText.push('text-' + name + ':' + val);
   });
@@ -46118,7 +61950,7 @@ function assembleCssText(tooltipModel) {
   } // Border style
 
 
-  each$11(['width', 'color', 'radius'], function (name) {
+  each$15(['width', 'color', 'radius'], function (name) {
     var borderName = 'border-' + name;
     var camelCase = toCamelCase$1(borderName);
     var val = tooltipModel.get(camelCase);
@@ -46609,8 +62441,8 @@ TooltipRichContent.prototype = {
 * specific language governing permissions and limitations
 * under the License.
 */
-var bind$2 = bind;
-var each$10 = each$1;
+var bind$3 = bind;
+var each$14 = each$1;
 var parsePercent$2 = parsePercent$1;
 var proxyRect = new Rect({
   shape: {
@@ -46693,7 +62525,7 @@ extendComponentView({
   _initGlobalListener: function () {
     var tooltipModel = this._tooltipModel;
     var triggerOn = tooltipModel.get('triggerOn');
-    register('itemTooltip', this._api, bind$2(function (currTrigger, e, dispatchAction) {
+    register('itemTooltip', this._api, bind$3(function (currTrigger, e, dispatchAction) {
       // If 'none', it is not controlled by mouse totally.
       if (triggerOn !== 'none') {
         if (triggerOn.indexOf(currTrigger) >= 0) {
@@ -46904,7 +62736,7 @@ extendComponentView({
     var renderMode = this._renderMode;
     var newLine = this._newLine;
     var markers = {};
-    each$10(dataByCoordSys, function (itemCoordSys) {
+    each$14(dataByCoordSys, function (itemCoordSys) {
       // var coordParamList = [];
       // var coordDefaultHTML = [];
       // var coordTooltipModel = buildTooltipModel([
@@ -46915,7 +62747,7 @@ extendComponentView({
       // ]);
       // var displayMode = coordTooltipModel.get('displayMode');
       // var paramsList = displayMode === 'single' ? singleParamsList : [];
-      each$10(itemCoordSys.dataByAxis, function (item) {
+      each$14(itemCoordSys.dataByAxis, function (item) {
         var axisModel = ecModel.getComponent(item.axisDim + 'Axis', item.axisIndex);
         var axisValue = item.value;
         var seriesDefaultHTML = [];
@@ -47072,7 +62904,7 @@ extendComponentView({
     if (formatter && typeof formatter === 'string') {
       html = formatTpl(formatter, params, true);
     } else if (typeof formatter === 'function') {
-      var callback = bind$2(function (cbTicket, html) {
+      var callback = bind$3(function (cbTicket, html) {
         if (cbTicket === this._ticket) {
           tooltipContent.setContent(html, markers, tooltipModel);
 
@@ -47162,17 +62994,17 @@ extendComponentView({
   _updateContentNotChangedOnAxis: function (dataByCoordSys) {
     var lastCoordSys = this._lastDataByCoordSys;
     var contentNotChanged = !!lastCoordSys && lastCoordSys.length === dataByCoordSys.length;
-    contentNotChanged && each$10(lastCoordSys, function (lastItemCoordSys, indexCoordSys) {
+    contentNotChanged && each$14(lastCoordSys, function (lastItemCoordSys, indexCoordSys) {
       var lastDataByAxis = lastItemCoordSys.dataByAxis || {};
       var thisItemCoordSys = dataByCoordSys[indexCoordSys] || {};
       var thisDataByAxis = thisItemCoordSys.dataByAxis || [];
       contentNotChanged &= lastDataByAxis.length === thisDataByAxis.length;
-      contentNotChanged && each$10(lastDataByAxis, function (lastItem, indexAxis) {
+      contentNotChanged && each$14(lastDataByAxis, function (lastItem, indexAxis) {
         var thisItem = thisDataByAxis[indexAxis] || {};
         var lastIndices = lastItem.seriesDataIndices || [];
         var newIndices = thisItem.seriesDataIndices || [];
         contentNotChanged &= lastItem.value === thisItem.value && lastItem.axisType === thisItem.axisType && lastItem.axisId === thisItem.axisId && lastIndices.length === newIndices.length;
-        contentNotChanged && each$10(lastIndices, function (lastIdxItem, j) {
+        contentNotChanged && each$14(lastIndices, function (lastIdxItem, j) {
           var newIdxItem = newIndices[j];
           contentNotChanged &= lastIdxItem.seriesIndex === newIdxItem.seriesIndex && lastIdxItem.dataIndex === newIdxItem.dataIndex;
         });
@@ -47394,7 +63226,7 @@ exports.helper = helper;
 exports.matrix = matrix;
 exports.vector = vector;
 exports.color = color;
-exports.parseGeoJSON = parseGeoJSON;
+exports.parseGeoJSON = parseGeoJson$1;
 exports.parseGeoJson = parseGeoJson;
 exports.util = ecUtil;
 exports.graphic = graphic$1;
