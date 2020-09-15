@@ -9,6 +9,7 @@
     "css": "less"
   },
   "scripts": {
+    "build:tsc": "tsc",
     "build:weapp": "taro build --type weapp",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",

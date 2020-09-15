@@ -1,7 +1,7 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
-import BarChart from "../../components/bar-chart";
+import { BarChart } from "../../echarts-taro3-react";
 import "./index.less";
 
 export default class Bar extends Component {

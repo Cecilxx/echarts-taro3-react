@@ -1,7 +1,7 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from 'react'
 import { View } from '@tarojs/components'
-import ScatterChart from '../../components/scatter-chart'
+import { ScatterChart } from '../../echarts-taro3-react'
 import "./index.less";
 
 export default class Scatter extends Component {

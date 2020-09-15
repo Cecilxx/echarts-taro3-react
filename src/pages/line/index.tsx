@@ -1,7 +1,7 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from 'react'
 import { View } from '@tarojs/components'
-import LineChart from '../../components/line-chart'
+import { LineChart } from '../../echarts-taro3-react'
 import "./index.less";
 
 export default class Line extends Component {

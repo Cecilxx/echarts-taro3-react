@@ -3,60 +3,42 @@ import React, { Component } from "react";
 import * as echarts from "../ec-canvas-taro/echarts";
 import EcCanvasTaro, { ECObj } from "../ec-canvas-taro";
 
-interface BarChartState {
-  ec: ECObj;
-}
-
 function setChartData(chart, data) {
   let option = {
-    tooltip: {},
-    color: ["#3398DB"],
-    xAxis: [
+    xAxis: {},
+    yAxis: {},
+    series: [
       {
-        type: "category",
-        data: [],
-        axisTick: {
-          alignWithLabel: true,
-        },
+        symbolSize: 20,
+        data: data,
+        type: "scatter",
       },
     ],
-    yAxis: [
-      {
-        type: "value",
-      },
-    ],
-    series: [],
   };
-  if (data && data.dimensions && data.measures) {
-    option.xAxis[0].data = data.dimensions.data;
-    option.series = data.measures.map((item) => {
-      return {
-        ...item,
-        type: "bar",
-      };
-    });
-  }
   chart.setOption(option);
 }
 
-export default class BarChart extends Component<{}, BarChartState> {
-  Chart: any;
+interface ScatterChartState {
+  ec: ECObj;
+}
 
+export default class ScatterChart extends Component<{}, ScatterChartState> {
+  Chart: any;
   constructor(props) {
     super(props);
+    this.state = {
+      ec: {
+        lazyLoad: true,
+      },
+    };
   }
 
-  state = {
-    ec: {
-      lazyLoad: true,
-    },
-  };
-
   refresh(data) {
-    this.Chart.init((canvas, width, height) => {
+    this.Chart.init((canvas, width, height, canvasDpr) => {
       const chart = echarts.init(canvas, null, {
         width: width,
         height: height,
+        devicePixelRatio: canvasDpr
       });
       setChartData(chart, data);
       return chart;

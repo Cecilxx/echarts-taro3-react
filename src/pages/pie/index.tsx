@@ -1,7 +1,7 @@
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
 import "./index.less";
-import PieChart from "../../components/pie-chart";
+import { PieChart } from "../../echarts-taro3-react";
 
 export default class Index extends Component {
   pieChart: any;
