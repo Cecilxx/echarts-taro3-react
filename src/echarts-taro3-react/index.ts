@@ -6,4 +6,4 @@ export { default as RadarChart } from "./radar-chart";
 export { default as HeatmapChart } from "./heatmap-chart";
 export { default as GaugeChart } from "./gauge-chart";
 export { default as FunnelChart } from "./funnel-chart";
-export { default as MapChart } from "./map-chart";
+// export { default as MapChart } from "./map-chart";

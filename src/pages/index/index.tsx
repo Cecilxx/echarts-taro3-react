@@ -45,7 +45,7 @@ class Index extends Component<{}, IndexState> {
         { id: 'scatter', name: '散点图', img: ScatterIcon },
         { id: 'radar', name: '雷达图', img: RadarIcon },
         { id: 'heatmap', name: '热力图', img: HeatmapIcon },
-        { id: 'map', name: '地图', img: MapIcon  },
+        // { id: 'map', name: '地图', img: MapIcon  },
         { id: 'gauge', name: '仪表盘', img: GaugeIcon },
         { id: 'funnel', name: '漏斗图', img: FunnelIcon  },
       ],
