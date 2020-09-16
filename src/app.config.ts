@@ -5,6 +5,11 @@ export default {
     "pages/line/index",
     "pages/scatter/index",
     "pages/bar/index",
+    "pages/radar/index",
+    "pages/heatmap/index",
+    "pages/gauge/index",
+    "pages/funnel/index",
+    "pages/map/index",
   ],
   window: {
     backgroundTextStyle: "light",

@@ -3,7 +3,7 @@ import { View } from "@tarojs/components";
 import "./index.less";
 import { PieChart } from "../../echarts-taro3-react";
 
-export default class Index extends Component {
+export default class Pie extends Component {
   pieChart: any;
 
   componentDidMount() {
@@ -21,7 +21,7 @@ export default class Index extends Component {
 
   render() {
     return (
-      <View className="pie-chart">
+      <View className='pie-chart'>
         <PieChart ref={this.refPieChart} />
       </View>
     );
