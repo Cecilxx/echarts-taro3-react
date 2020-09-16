@@ -1,5 +1,5 @@
 # echarts-taro3-react
-
+> [echarts-for-taro](https://github.com/WsmDyj/echarts-for-taro) taro3.x版本
 基于taro3.x版本构建的微信小程序echarts组件，及使用示例
 
 ## 特性
