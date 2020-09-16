@@ -5,6 +5,6 @@ deploy_versions/
 node_modules/
 .DS_Store
 resource/
-lib/
+package/
 
 src/echarts-taro3-react/ec-canvas-taro/
