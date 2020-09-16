@@ -5,21 +5,12 @@ import { BarChart } from "../../echarts-taro3-react";
 import "./index.less";
 
 export default class Bar extends Component {
-  barChart: any;
-
   componentDidMount() {
-    const chartData = {
-      dimensions: {
-        data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-      },
-      measures: [
-        {
-          data: [10, 52, 200, 334, 390, 330, 220],
-        },
-      ],
-    };
-    this.barChart.refresh(chartData);
+    // refresh接受option参数，具体可参考echarts官网
+    this.barChart.refresh();
   }
+
+  barChart: any;
 
   refBarChart = (node) => (this.barChart = node);
 

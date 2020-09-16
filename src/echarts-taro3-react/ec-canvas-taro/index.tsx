@@ -31,8 +31,6 @@ interface EcCanvasTaro {
   chart: any;
 }
 
-let ctx;
-
 class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
   componentDidMount() {
     echarts.registerPreprocessor((option) => {
@@ -145,7 +143,6 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
       handler.processGesture(wrapTouch(e), "end");
     }
   }
-
   render() {
     const { canvasId } = this.props;
     return (

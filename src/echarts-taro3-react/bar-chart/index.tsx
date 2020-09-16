@@ -7,57 +7,68 @@ interface BarChartState {
   ec: ECObj;
 }
 
-function setChartData(chart, data) {
-  let option = {
-    tooltip: {},
-    color: ["#3398DB"],
-    xAxis: [
-      {
-        type: "category",
-        data: [],
-        axisTick: {
-          alignWithLabel: true,
-        },
+interface SerieItem {
+  data: number[],
+  type: string,
+  showBackground: boolean,
+  backgroundStyle: {
+    color: string
+  },
+}
+
+interface BarOption {
+  xAxis: {
+    type: string,
+    data: string[],
+  },
+  yAxis: {
+    type: string,
+  },
+  series: SerieItem[]
+}
+
+const defautOption: BarOption = {
+  xAxis: {
+    type: "category",
+    data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  },
+  yAxis: {
+    type: "value",
+  },
+  series: [
+    {
+      data: [120, 200, 150, 80, 70, 110, 130],
+      type: "bar",
+      showBackground: true,
+      backgroundStyle: {
+        color: "rgba(220, 220, 220, 0.8)",
       },
-    ],
-    yAxis: [
-      {
-        type: "value",
-      },
-    ],
-    series: [],
-  };
-  if (data && data.dimensions && data.measures) {
-    option.xAxis[0].data = data.dimensions.data;
-    option.series = data.measures.map((item) => {
-      return {
-        ...item,
-        type: "bar",
-      };
-    });
+    },
+  ],
+}
+
+function setChartData(chart, option?: BarOption) {
+  const temp: BarOption = {
+    ...defautOption,
+    ...(option || {})
   }
-  chart.setOption(option);
+  chart.setOption(temp);
 }
 
 export default class BarChart extends Component<{}, BarChartState> {
-  Chart: any;
-
-  constructor(props) {
-    super(props);
-  }
-
   state = {
     ec: {
       lazyLoad: true,
     },
   };
+  Chart: any;
 
-  refresh(data) {
+  refresh(data: BarOption) {
     this.Chart.init((canvas, width, height, canvasDpr) => {
       const chart = echarts.init(canvas, null, {
         width: width,
         height: height,
-        devicePixelRatio: canvasDpr
+        devicePixelRatio: canvasDpr,
       });
       setChartData(chart, data);
       return chart;
