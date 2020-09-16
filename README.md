@@ -1,5 +1,6 @@
 # echarts-taro3-react
 > [echarts-for-taro](https://github.com/WsmDyj/echarts-for-taro) taro3.x版本
+
 基于taro3.x版本构建的微信小程序echarts组件，及使用示例
 
 ## 特性
@@ -18,10 +19,11 @@
 + [x] 仪表盘
 + [x] 漏斗图
 
-## 使用
+## 快速安装
 ```bash
 npm i echarts-taro3-react
 ```
+## 使用
 ```js
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
@@ -55,4 +57,9 @@ export default class Bar extends Component {
     );
   }
 }
+```
+
+## 开发
+```bash
+npm run dev:weapp
 ```
