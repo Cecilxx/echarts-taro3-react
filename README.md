@@ -1,4 +1,6 @@
 # echarts-taro3-react
+> [echarts-for-taro](https://github.com/WsmDyj/echarts-for-taro) taro3.x版本
+
 基于taro3.x版本构建的微信小程序echarts组件，及使用示例
 
 ## 特性
@@ -11,17 +13,47 @@
 + [x] 折线图
 + [x] 饼图
 + [x] 散点图
-+ [ ] 雷达图
-+ [ ] 热力图
-+ [ ] 树图
-+ [ ] 矩形树图
-+ [ ] 旭日图
-+ [ ] 地图
++ [x] 雷达图
++ [x] 热力图
++ [x] 地图
++ [x] 仪表盘
++ [x] 漏斗图
 
 ## 使用
+```bash
+npm i echarts-taro3-react
+```
+```js
+import React, { Component } from "react";
+import { View } from "@tarojs/components";
+import { BarChart } from "echarts-taro3-react";
+import "./index.less";
 
-+ [ ] 小程序原生组件安装
+export default class Bar extends Component {
+  barChart: any;
 
-+ [ ] taro3.0组件安装
+  componentDidMount() {
+    const chartData = {
+      dimensions: {
+        data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      },
+      measures: [
+        {
+          data: [10, 52, 200, 334, 390, 330, 220],
+        },
+      ],
+    };
+    this.barChart.refresh(chartData);
+  }
 
-+ [ ] h5组件安装
+  refBarChart = (node) => (this.barChart = node);
+
+  render() {
+    return (
+      <View className='bar-chart'>
+        <BarChart ref={this.refBarChart} />
+      </View>
+    );
+  }
+}
+```
