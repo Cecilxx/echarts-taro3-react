@@ -48,10 +48,7 @@ const defautOption: BarOption = {
 }
 
 function setChartData(chart, option?: BarOption) {
-  const temp: BarOption = {
-    ...defautOption,
-    ...(option || {})
-  }
+  const temp: BarOption = option || defautOption
   chart.setOption(temp);
 }
 
