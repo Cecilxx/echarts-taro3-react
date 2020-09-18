@@ -1,6 +1,6 @@
 # echarts-taro3-react
 
-基于taro3.x版本构建的微信小程序echarts组件，及使用示例
+基于taro3.x-react框架构建的微信小程序版本echarts组件，及使用示例
 
 ## 特性
 + taro3.0
@@ -29,7 +29,7 @@ npm i echarts-taro3-react
 举例：
 
 ```js
-// 饼图
+// 柱状图
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
 import { EChart } from "echarts-taro3-react";
