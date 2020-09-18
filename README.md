@@ -29,7 +29,7 @@ npm i echarts-taro3-react
 举例：
 
 ```js
-// 饼图
+// 柱状图
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
 import { EChart } from "echarts-taro3-react";
