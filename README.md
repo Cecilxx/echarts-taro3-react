@@ -1,6 +1,6 @@
 # echarts-taro3-react
 
-基于taro3.x-react版本构建的微信小程序echarts组件，及使用示例
+基于taro3.x-react框架构建的微信小程序版本echarts组件，及使用示例
 
 ## 特性
 + taro3.0
