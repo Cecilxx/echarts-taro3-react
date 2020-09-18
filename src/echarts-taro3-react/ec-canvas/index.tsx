@@ -147,8 +147,8 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
     const { canvasId } = this.props;
     return (
       <Canvas
-        type="2d"
-        className="ec-canvas"
+        type='2d'
+        className='ec-canvas'
         canvasId={canvasId}
         onTouchStart={this.touchStart}
         onTouchMove={this.touchMove}
