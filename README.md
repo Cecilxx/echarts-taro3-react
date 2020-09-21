@@ -2,6 +2,9 @@
 
 基于Taro3.x-React框架构建的微信小程序版本echarts组件，及使用示例
 
+## 传送门
++ [Taro3.x-Vue版本](https://github.com/Cecilxx/echarts-taro3-vue)
+
 ## 特性
 + Taro3.x
 + React
