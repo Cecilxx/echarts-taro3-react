@@ -1,11 +1,11 @@
 # echarts-taro3-react
 
-基于taro3.x-react框架构建的微信小程序版本echarts组件，及使用示例
+基于Taro3.x-React框架构建的微信小程序版本echarts组件，及使用示例
 
 ## 特性
-+ taro3.0
-+ react
-+ typescript
++ Taro3.x
++ React
++ Typescript
 
 ## 功能
 + [x] 柱状图
@@ -71,7 +71,9 @@ export default class Bar extends Component {
     );
   }
 }
+```
 
+```js
 // 仪表盘
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
