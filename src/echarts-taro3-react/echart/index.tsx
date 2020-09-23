@@ -11,13 +11,6 @@ interface BaseChartProps {
   canvasId: string
 }
 
-function setChartData(chart, option) {
-  if (!option || typeof option !== 'object') {
-    console.error('设置echarts数据失败，option必传')
-  }
-  chart.setOption(option);
-}
-
 class BaseChart extends Component<BaseChartProps, BaseChartState> {
   state = {
     ec: {
@@ -34,7 +27,8 @@ class BaseChart extends Component<BaseChartProps, BaseChartState> {
         height: height,
         devicePixelRatio: canvasDpr,
       });
-      setChartData(chart, data);
+      canvas.setChart(chart);
+      chart.setOption(data);
       return chart;
     });
   }
