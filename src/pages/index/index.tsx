@@ -1,6 +1,6 @@
 import Taro from "@tarojs/taro";
 import React, { Component } from 'react'
-import { View, Text, Image } from '@tarojs/components'
+import { View, Text, Image, Button } from '@tarojs/components'
 import PieIcon from '../../img/icons/pie.png'
 import BarIcon from '../../img/icons/bar.png'
 import LineIcon from '../../img/icons/line.png'
@@ -66,6 +66,7 @@ class Index extends Component<{}, IndexState> {
             </View>
           );
         })}
+        <Button type='default' onClick={this.gotoEcharts.bind(this, 'more')}>一个页面多个图表</Button>
       </View>
     );
   }

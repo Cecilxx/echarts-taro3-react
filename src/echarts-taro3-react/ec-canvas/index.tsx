@@ -66,14 +66,16 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
   initByNewWay(callback?) {
     const query = Taro.createSelectorQuery();
     const { ec, canvasId } = this.props;
-
+    console.log(query
+      .select(`.${canvasId}`))
     query
-      .select(".ec-canvas")
+      .select(`.ec-canvas.${canvasId}`)
       .fields({
         node: true,
         size: true,
       })
       .exec((res) => {
+        console.log(res)
         const canvasNode = res[0].node;
         this.canvasNode = canvasNode;
         const canvasDpr = Taro.getSystemInfoSync().pixelRatio;
@@ -148,7 +150,7 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
     return (
       <Canvas
         type='2d'
-        className='ec-canvas'
+        className={`ec-canvas ${canvasId}`}
         canvasId={canvasId}
         onTouchStart={this.touchStart}
         onTouchMove={this.touchMove}

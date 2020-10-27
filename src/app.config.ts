@@ -9,6 +9,7 @@ export default {
     "pages/heatmap/index",
     "pages/gauge/index",
     "pages/funnel/index",
+    "pages/more/index",
   ],
   window: {
     backgroundTextStyle: "light",
