@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build:tsc": "tsc",
-    "build:weapp": "npx @tarojs/cli@3.0.8 build --type weapp",
+    "build:weapp": "taro build --type weapp",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",
     "build:tt": "taro build --type tt",

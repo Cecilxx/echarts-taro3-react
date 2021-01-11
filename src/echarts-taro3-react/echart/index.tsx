@@ -8,7 +8,7 @@ interface BaseChartState {
 }
 
 interface BaseChartProps {
-  canvasId: string
+  canvasId: string;
 }
 
 class BaseChart extends Component<BaseChartProps, BaseChartState> {
@@ -36,7 +36,7 @@ class BaseChart extends Component<BaseChartProps, BaseChartState> {
   refChart = (node) => (this.Chart = node);
 
   render() {
-    const { canvasId } = this.props
+    const { canvasId } = this.props;
     return (
       <EcCanvasTaro
         ref={this.refChart}
@@ -47,4 +47,4 @@ class BaseChart extends Component<BaseChartProps, BaseChartState> {
   }
 }
 
-export default BaseChart
+export default BaseChart;

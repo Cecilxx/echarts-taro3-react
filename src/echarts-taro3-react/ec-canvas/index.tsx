@@ -58,16 +58,14 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
   }
 
   init(callback?) {
-    Taro.nextTick(() => {
+    setTimeout(() => {
       this.initByNewWay(callback);
-    });
+    }, 30);
   }
 
   initByNewWay(callback?) {
     const query = Taro.createSelectorQuery();
     const { ec, canvasId } = this.props;
-    console.log(query
-      .select(`.${canvasId}`))
     query
       .select(`.ec-canvas.${canvasId}`)
       .fields({
@@ -75,7 +73,7 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
         size: true,
       })
       .exec((res) => {
-        console.log(res)
+        console.log(res);
         const canvasNode = res[0].node;
         this.canvasNode = canvasNode;
         const canvasDpr = Taro.getSystemInfoSync().pixelRatio;
@@ -118,7 +116,7 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
       });
       handler.processGesture(wrapTouch(e), "start");
     }
-  }
+  };
   touchMove = (e) => {
     if (this.chart && e.touches.length > 0) {
       var touch = e.touches[0];
@@ -129,7 +127,7 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
       });
       handler.processGesture(wrapTouch(e), "change");
     }
-  }
+  };
   touchEnd = (e) => {
     if (this.chart) {
       const touch = e.changedTouches ? e.changedTouches[0] : {};
@@ -144,12 +142,12 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
       });
       handler.processGesture(wrapTouch(e), "end");
     }
-  }
+  };
   render() {
     const { canvasId } = this.props;
     return (
       <Canvas
-        type='2d'
+        type="2d"
         className={`ec-canvas ${canvasId}`}
         canvasId={canvasId}
         onTouchStart={this.touchStart}
