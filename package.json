@@ -39,20 +39,22 @@
     "sr-sdk-wxapp": "^1.3.6"
   },
   "devDependencies": {
-    "@types/webpack-env": "^1.13.6",
-    "@types/react": "^16.0.0",
-    "@tarojs/mini-runner": "3.0.8",
     "@babel/core": "^7.8.0",
+    "@tarojs/mini-runner": "3.0.8",
     "@tarojs/webpack-runner": "3.0.8",
-    "babel-preset-taro": "3.0.8",
-    "eslint-config-taro": "3.0.8",
-    "eslint": "^6.8.0",
-    "eslint-plugin-react": "^7.8.2",
-    "eslint-plugin-import": "^2.12.0",
-    "eslint-plugin-react-hooks": "^1.6.1",
-    "stylelint": "9.3.0",
-    "@typescript-eslint/parser": "^2.x",
+    "@types/react": "^16.0.0",
+    "@types/webpack-env": "^1.13.6",
     "@typescript-eslint/eslint-plugin": "^2.x",
+    "@typescript-eslint/parser": "^2.x",
+    "babel-preset-taro": "3.0.8",
+    "eslint": "^6.8.0",
+    "eslint-config-taro": "3.0.8",
+    "eslint-plugin-import": "^2.12.0",
+    "eslint-plugin-react": "^7.8.2",
+    "eslint-plugin-react-hooks": "^1.6.1",
+    "gulp": "^4.0.2",
+    "gulp-uglify": "^3.0.2",
+    "stylelint": "9.3.0",
     "typescript": "^3.7.0"
   }
 }

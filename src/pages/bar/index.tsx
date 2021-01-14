@@ -2,6 +2,7 @@
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
 import { EChart } from "echarts-taro3-react";
+
 import "./index.less";
 
 console.log("EChart", EChart);
