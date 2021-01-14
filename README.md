@@ -1,6 +1,14 @@
 # echarts-taro3-react
 
+
 基于Taro3.x-React框架构建的微信小程序版本echarts组件，及使用示例
+
+--------
+
+## 版本日志：
+1.0.10：
+* 压缩了echarts.js, 代码大小从2.2m下降至543kb
+* 修复了更新数据不能刷新的问题
 
 ## 传送门
 + [Taro3.x-Vue版本](https://github.com/Cecilxx/echarts-taro3-vue)
