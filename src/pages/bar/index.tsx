@@ -1,9 +1,10 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
-import { EChart } from "../../echarts-taro3-react";
+import { EChart } from "echarts-taro3-react";
 import "./index.less";
 
+console.log("EChart", EChart);
 export default class Bar extends Component {
   componentDidMount() {
     const defautOption = {
