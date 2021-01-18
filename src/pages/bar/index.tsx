@@ -1,7 +1,7 @@
 // import Taro from "@tarojs/taro";
 import React, { Component } from "react";
 import { View } from "@tarojs/components";
-import { EChart } from "../../../package/lib";
+import { EChart } from "echarts-taro3-react";
 
 import "./index.less";
 

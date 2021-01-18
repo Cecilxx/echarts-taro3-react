@@ -5,7 +5,14 @@
 
 --------
 
+## 代码体积过大解决方案：
+* 使用分包，[参考微信官文档](https://developers.weixin.qq.com/miniprogram/dev/framework/subpackages/basic.html)
+* 自定义`echart.js`，自行前往[echart官网](https://echarts.apache.org/zh/builder.html)<strong>（注意：版本需要选择4.9.0）</strong> 按需构建`echart.js`，然后替换掉`echarts-taro3-react/lib/ec-canvas/echart.js`
+
 ## 版本日志：
+1.0.11：
+* 新增datazoom功能
+
 1.0.10：
 * 压缩了echarts.js, 代码大小从2.2m下降至543kb
 * 修复了更新数据不能刷新的问题
