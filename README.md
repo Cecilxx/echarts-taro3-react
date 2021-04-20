@@ -7,7 +7,7 @@
 
 ## 代码体积过大解决方案：
 * 使用分包，[参考微信官文档](https://developers.weixin.qq.com/miniprogram/dev/framework/subpackages/basic.html)
-* 自定义`echart.js`，自行前往[echart官网](https://echarts.apache.org/zh/builder.html)<strong>（注意：版本需要选择4.9.0）</strong> 按需构建`echart.js`，然后替换掉`echarts-taro3-react/lib/ec-canvas/echart.js`
+* 自定义`echart.js`，自行前往[echart官网](https://echarts.apache.org/zh/builder.html)<strong>（注意：版本需要选择4.9.0，不要勾选压缩，可下载下来后自行压缩）</strong> 按需构建`echart.js`，然后替换掉`echarts-taro3-react/lib/ec-canvas/echart.js`
 
 ## 版本日志：
 1.0.11：
