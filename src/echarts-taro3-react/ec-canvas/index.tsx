@@ -73,7 +73,6 @@ class EcCanvasTaro extends Component<EcCanvasProps, EcCanvasState> {
         size: true,
       })
       .exec((res) => {
-        console.log(res);
         const canvasNode = res[0].node;
         this.canvasNode = canvasNode;
         const canvasDpr = Taro.getSystemInfoSync().pixelRatio;
