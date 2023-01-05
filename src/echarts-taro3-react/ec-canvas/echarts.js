@@ -1,6 +1,6 @@
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) : typeof define === 'function' && define.amd ? define(['exports'], factory) : factory(global.echarts = {});
-})(this, function (exports) {
+})(this, function (exports,window,document) {
   'use strict';
   /*
   * Licensed to the Apache Software Foundation (ASF) under one
@@ -7497,6 +7497,7 @@
   };
 
   Pattern.prototype.getCanvasPattern = function (ctx) {
+    console.log("ctx",ctx)
     return ctx.createPattern(this.image, this.repeat || 'repeat');
   };
   /**
